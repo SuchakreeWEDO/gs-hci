@@ -1,3 +1,6 @@
+[submodule "submodules/diff-gaussian-rasterization-depth"]
+	path = submodules/diff-gaussian-rasterization-depth
+	url = https://github.com/leo-frank/diff-gaussian-rasterization-depth.git
 [submodule "submodules/simple-knn"]
 	path = submodules/simple-knn
 	url = https://gitlab.inria.fr/bkerbl/simple-knn.git
