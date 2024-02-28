@@ -195,9 +195,9 @@ def prepare_output_and_logger(args):
             unique_str=os.getenv('OAR_JOB_ID')
         else:
             unique_str = str(uuid.uuid4())
-        time = datetime.now().strftime("%y%m%d_%I-%M-%S")
+        time = datetime.now().strftime("%y%m%d-%I%M%S")
         # args.model_path = os.path.join("./output/", f"{args.model_name}_{unique_str[0:10]}")
-        args.model_path = os.path.join("./output/", f"{args.model_name}_{time}")
+        args.model_path = os.path.join("./output/", f"{args.model_name}_{args.method}_{time}")
         
     # Set up output folder
     print("Output folder: {}".format(args.model_path))
