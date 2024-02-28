@@ -22,6 +22,7 @@ from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
+from datetime import datetime
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -87,9 +88,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
         depth_map, weight_map = render_pkg["depth_map"], render_pkg["weight_map"]
-        print("Rendered Image", image.shape) # torch.Size([3, 1200, 1600])
-        print("Rendered Depth Map", depth_map.shape)
-        print("Rendered Weight Map", weight_map.shape)
+        # print("Rendered Image", image.shape) # torch.Size([3, 1200, 1600])
+        # print("Rendered Depth Map", depth_map.shape)
+        # print("Rendered Weight Map", weight_map.shape)
 
         # Visualize Depth MAp and Weight Map
         # Caluculate Depth Loss then add to total loss for backward
@@ -151,7 +152,9 @@ def prepare_output_and_logger(args):
             unique_str=os.getenv('OAR_JOB_ID')
         else:
             unique_str = str(uuid.uuid4())
-        args.model_path = os.path.join("./output/", f"{args.model_name}_{unique_str[0:10]}")
+        time = datetime.now().strftime("%y%m%d_%I-%M-%S")
+        # args.model_path = os.path.join("./output/", f"{args.model_name}_{unique_str[0:10]}")
+        args.model_path = os.path.join("./output/", f"{args.model_name}_{time}")
         
     # Set up output folder
     print("Output folder: {}".format(args.model_path))
