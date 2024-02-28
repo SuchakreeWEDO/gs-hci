@@ -12,7 +12,8 @@
 import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
-from math import exp
+from math import exp, floor
+from scipy.stats import pearsonr
 
 def l1_loss(network_output, gt):
     return torch.abs((network_output - gt)).mean()
@@ -62,3 +63,33 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True):
     else:
         return ssim_map.mean(1).mean(1).mean(1)
 
+def local_pearson_loss(depth_src, depth_target, box_p, p_corr):
+    ''' We apply the depth correlation loss every iteration with a
+    patch size of 128 pixels and select 50% of all patches per iteration
+    We choose λ_depth = 0.1 
+    box_p = patch_size 128 ?
+    p_corr = ratio of selected patches 0.5 ? '''
+
+    # Randomly select patch, top left corner of the patch (x_0,y_0) has to be 0 <= x_0 <= max_h, 0 <= y_0 <= max_w
+    num_box_h = floor(depth_src.shape[0] / box_p)
+    num_box_w = floor(depth_src.shape[1] / box_p)
+    max_h = depth_src.shape[0] - box_p
+    max_w = depth_src.shape[1] - box_p
+
+    # Select the number of boxes based on hyperparameter p_corr
+    n_corr = int(p_corr * num_box_h * num_box_w)
+    x_0 = torch.randint(0, max_h, size=(n_corr,), device = 'cuda')
+    y_0 = torch.randint(0, max_w, size=(n_corr,), device = 'cuda')
+    x_1 = x_0 + box_p
+    y_1 = y_0 + box_p
+
+    _loss = torch.tensor(0.0,device='cuda')
+                         
+    for i in range(len(x_0)):
+        _loss += pearson_depth_loss(depth_src[x_0[i]:x_1[i],y_0[i]:y_1[i]].reshape(-1), depth_target[x_0[i]:x_1[i],y_0[i]:y_1[i]].reshape(-1))
+    return _loss / n_corr
+
+# by fabby bc SparseGS did not provide the 'pearson_depth_loss' function
+def pearson_depth_loss(x, y):
+    r, p = pearsonr(x, y)
+    return r
