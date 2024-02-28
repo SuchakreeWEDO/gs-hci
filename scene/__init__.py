@@ -29,6 +29,8 @@ class Scene:
         self.model_path = args.model_path
         self.loaded_iter = None
         self.gaussians = gaussians
+        self.source_path = args.source_path
+        self.resolution_scales = resolution_scales
 
         if load_iteration:
             if load_iteration == -1:

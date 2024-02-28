@@ -12,7 +12,7 @@
 import os
 import torch
 from random import randint
-from utils.loss_utils import l1_loss, ssim, pearson_depth_loss
+from utils.loss_utils import l1_loss, ssim, local_pearson_loss
 from gaussian_renderer import render, network_gui
 import sys
 from scene import Scene, GaussianModel
@@ -24,6 +24,8 @@ from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
 from torchvision.utils import save_image
 import numpy as np
+from PIL import Image, ImageOps
+from utils.general_utils import PILtoTorch
 
 from datetime import datetime
 try:
@@ -100,49 +102,91 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         depth_map, weight_map = render_pkg["depth_map"], render_pkg["weight_map"]
 
         # Visualize Depth Map and Weight Map
-        if count_refresh % 20 == 0 or iteration == 7000 or iteration == 30000:
+        # if count_refresh % 20 == 0 or iteration == 7000 or iteration == 30000:
 
-            if not os.path.exists(f'{scene.model_path}/save_imgs/'):
-                os.makedirs(f'{scene.model_path}/save_imgs/')
-            if not os.path.exists(f'{scene.model_path}/save_imgs/{img_name}'):
-                os.makedirs(f'{scene.model_path}/save_imgs/{img_name}')
+            # if not os.path.exists(f'{scene.model_path}/save_imgs/'):
+            #     os.makedirs(f'{scene.model_path}/save_imgs/')
+            # if not os.path.exists(f'{scene.model_path}/save_imgs/{img_name}'):
+            #     os.makedirs(f'{scene.model_path}/save_imgs/{img_name}')
 
-            save_imgs_path = f"{scene.model_path}/save_imgs/{img_name}/"
+            # save_imgs_path = f"{scene.model_path}/save_imgs/{img_name}/"
 
-            print("-"*30)
+            # print("-"*30)
 
-            original_img = viewpoint_cam.original_image
-            save_image(original_img, f'{save_imgs_path}{img_name}_original_img_{iteration}.png')
+            # original_img = viewpoint_cam.original_image
+
+            # save_image(original_img, f'{save_imgs_path}{img_name}_original_img_{iteration}.png')
             # print("Original Image", torch.min(original_img).item(), torch.max(original_img).item())
-            print("Original Image", original_img.shape) # torch.Size([3, 1200, 1600]) # range [0,1]
+            # print("Original Image", original_img.shape) # torch.Size([3, 1200, 1600]) # range [0,1]
 
-            save_image(image, f'{save_imgs_path}{img_name}_rendered_img_{iteration}.png')
+            # save_image(image, f'{save_imgs_path}{img_name}_rendered_img_{iteration}.png')
             # print("Rendered Image", torch.min(image).item(), torch.max(image).item())
-            print("Rendered Image", image.shape) # torch.Size([3, 1200, 1600]) # range [0,1]
+            # print("Rendered Image", image.shape) # torch.Size([3, 1200, 1600]) # range [0,1]
 
-            save_image(weight_map, f'{save_imgs_path}{img_name}_weight_{iteration}.png')
+            # save_image(weight_map, f'{save_imgs_path}{img_name}_weight_{iteration}.png')
             # print("Weight", torch.min(weight_map).item(), torch.max(weight_map).item())
-            print("Rendered Weight Map", weight_map.shape) # torch.Size([1200, 1600]) # range [0,1]
+            # print("Rendered Weight Map", weight_map.shape) # torch.Size([1200, 1600]) # range [0,1]
 
             # also save Raw values of Depth
-            print("Depth", torch.min(depth_map).item(), torch.max(depth_map).item())
+            # print("Depth", torch.min(depth_map).item(), torch.max(depth_map).item())
             # print("Rendered Depth Map", depth_map.shape) # torch.Size([1200, 1600]) # range is [0,inf]
-            np.save( f'{save_imgs_path}{img_name}_depth_{iteration}', depth_map.clone().detach().cpu().numpy() )
+            # np.save( f'{save_imgs_path}{img_name}_depth_{iteration}', depth_map.clone().detach().cpu().numpy() )
             
             # Min Max Normalize Depth to range [0,1] and inverse balck-white before saving as image
-            depth_map = 1 - ( ( depth_map - torch.min(depth_map) ) / ( torch.max(depth_map) - torch.min(depth_map) ) )
-            save_image(depth_map.clone().detach().cpu(), f'{save_imgs_path}{img_name}_depth_{iteration}.png')
-            print("Norm Depth", torch.min(depth_map).item(), torch.max(depth_map).item())
+            # depth_map = 1 - ( ( depth_map - torch.min(depth_map) ) / ( torch.max(depth_map) - torch.min(depth_map) ) )
+            # save_image(depth_map.clone().detach().cpu(), f'{save_imgs_path}{img_name}_depth_{iteration}.png')
+            # print("Norm Depth", torch.min(depth_map).item(), torch.max(depth_map).item())
 
             
         # TODO : Caluculate Depth Loss then add to total loss for backward and add to tensor board
-        # l_depth = pearson_depth_loss(depth_src = monogt_depth, depth_target = depth_map, box_p, p_corr)
+        
+
+        if args.method == "gs-depth":
+            
+            lambda_depth = 0.1
+
+            depth_map = 1 - ( ( depth_map - torch.min(depth_map) ) / ( torch.max(depth_map) - torch.min(depth_map) ) )
+
+            # Open ModoDepth Image
+            print("scene.source_path", scene.source_path) # D:\3d-reconstruction\datasets\android-img-fixisoae
+            mono_depth_path = os.path.join(scene.source_path, "depth", f"{img_name}_depth.png")
+            print(mono_depth_path)
+            mono_depth = Image.open(mono_depth_path)
+            mono_depth = ImageOps.grayscale(mono_depth) 
+            print(mono_depth)
+
+            orig_w, orig_h = depth_map.shape[1], depth_map.shape[0] # get size from rendered depth map
+
+            resolution_scale = scene.resolution_scales[0]
+            resolution = args.resolution
+
+            if resolution == -1:
+                if orig_w > 1600:
+                    print("[ INFO ] Encountered quite large input images (>1.6K pixels width), rescaling to 1.6K.\n "
+                        "If this is not desired, please explicitly specify '--resolution/-r' as 1")
+                    global_down = orig_w / 1600
+                else:
+                    global_down = 1
+            else:
+                global_down = orig_w / resolution
+
+            scale = float(global_down) * float(resolution_scale)
+            resolution = (int(orig_w / scale), int(orig_h / scale))
+
+            resized_mono_depth = PILtoTorch(mono_depth, resolution)
+            mono_depth = resized_mono_depth[:3, ...].squeeze(0)
+
+            print(mono_depth.shape, depth_map.shape)
+            assert mono_depth.shape == depth_map.shape, "monodepth and depth map must be the same shape !!"
+
+            l_depth = local_pearson_loss(depth_src = mono_depth, depth_target = depth_map, box_p=128, p_corr=0.5)
+
 
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
 
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+        loss = ((1.0 - opt.lambda_dssim) * Ll1 ) + ( opt.lambda_dssim * (1.0 - ssim(image, gt_image))) + (lambda_depth * l_depth)
         loss.backward()
 
         iter_end.record()
@@ -157,7 +201,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 progress_bar.close()
 
             # Log and save
-            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
+            training_report(tb_writer, iteration, Ll1, loss, l1_loss, l_depth, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
@@ -213,9 +257,10 @@ def prepare_output_and_logger(args):
         print("Tensorboard not available: not logging progress")
     return tb_writer
 
-def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs):
+def training_report(tb_writer, iteration, Ll1, loss, l1_loss, l_depth, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs):
     if tb_writer:
         tb_writer.add_scalar('train_loss_patches/l1_loss', Ll1.item(), iteration)
+        tb_writer.add_scalar('train_loss_patches/l_depth', l_depth.item(), iteration)
         tb_writer.add_scalar('train_loss_patches/total_loss', loss.item(), iteration)
         tb_writer.add_scalar('iter_time', elapsed, iteration)
 
