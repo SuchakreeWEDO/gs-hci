@@ -22,6 +22,8 @@ from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
+from torchvision.utils import save_image
+
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -75,7 +77,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Pick a random Camera
         if not viewpoint_stack:
             viewpoint_stack = scene.getTrainCameras().copy()
-        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+        
+        rand_this_iter = randint(0, len(viewpoint_stack)-1)
+        viewpoint_cam = viewpoint_stack.pop(rand_this_iter)
+        img_name = viewpoint_cam.image_name
 
         # Render
         if (iteration - 1) == debug_from:
@@ -86,12 +91,34 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         render_pkg = render(viewpoint_cam, gaussians, pipe, bg)
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
-        depth_map, weight_map = render_pkg["depth_map"], render_pkg["weight_map"]
-        print("Rendered Image", image.shape) # torch.Size([3, 1200, 1600])
-        print("Rendered Depth Map", depth_map.shape)
-        print("Rendered Weight Map", weight_map.shape)
+        # Visualize Depth Map and Weight Map
+        if not os.path.exists(f'{scene.model_path}/save_imgs/'):
+            os.makedirs(f'{scene.model_path}/save_imgs/')
+        if not os.path.exists(f'{scene.model_path}/save_imgs/{img_name}'):
+            os.makedirs(f'{scene.model_path}/save_imgs/{img_name}')
 
-        # Visualize Depth MAp and Weight Map
+        depth_map, weight_map = render_pkg["depth_map"], render_pkg["weight_map"]
+
+        save_imgs_path = f"{scene.model_path}/save_imgs/{img_name}/"
+
+        original_img = viewpoint_cam.original_image
+        save_image(original_img, f'{save_imgs_path}{img_name}_original_img_{iteration}.png')
+        print("Original Image", original_img.shape) # torch.Size([3, 1200, 1600])
+        print("Min", torch.min(original_img), "Max", torch.max(original_img))
+
+        save_image(image, f'{save_imgs_path}{img_name}_rendered_img_{iteration}.png')
+        print("Rendered Image", image.shape) # torch.Size([3, 1200, 1600])
+        print("Min", torch.min(image), "Max", torch.max(image))
+
+        save_image(depth_map, f'{save_imgs_path}{img_name}_depth_{iteration}.png')
+        print("Rendered Depth Map", depth_map.shape)
+        print("Min", torch.min(depth_map), "Max", torch.max(depth_map))
+        
+        save_image(weight_map, f'{save_imgs_path}{img_name}_weight_{iteration}.png')
+        print("Rendered Weight Map", weight_map.shape)
+        print("Min", torch.min(weight_map), "Max", torch.max(weight_map))
+
+        
         # Caluculate Depth Loss then add to total loss for backward
 
         # Loss
