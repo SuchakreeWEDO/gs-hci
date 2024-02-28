@@ -100,14 +100,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         depth_map, weight_map = render_pkg["depth_map"], render_pkg["weight_map"]
 
         # Visualize Depth Map and Weight Map
-        if not os.path.exists(f'{scene.model_path}/save_imgs/'):
-            os.makedirs(f'{scene.model_path}/save_imgs/')
-        if not os.path.exists(f'{scene.model_path}/save_imgs/{img_name}'):
-            os.makedirs(f'{scene.model_path}/save_imgs/{img_name}')
-
-        save_imgs_path = f"{scene.model_path}/save_imgs/{img_name}/"
-
         if count_refresh % 20 == 0 or iteration == 7000 or iteration == 30000:
+
+            if not os.path.exists(f'{scene.model_path}/save_imgs/'):
+                os.makedirs(f'{scene.model_path}/save_imgs/')
+            if not os.path.exists(f'{scene.model_path}/save_imgs/{img_name}'):
+                os.makedirs(f'{scene.model_path}/save_imgs/{img_name}')
+
+            save_imgs_path = f"{scene.model_path}/save_imgs/{img_name}/"
 
             print("-"*30)
 
@@ -135,7 +135,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             print("Norm Depth", torch.min(depth_map).item(), torch.max(depth_map).item())
 
             
-        # TODO : Caluculate Depth Loss then add to total loss for backward
+        # TODO : Caluculate Depth Loss then add to total loss for backward and add to tensor board
         # l_depth = pearson_depth_loss(depth_src = monogt_depth, depth_target = depth_map, box_p, p_corr)
 
         # Loss
@@ -208,7 +208,7 @@ def prepare_output_and_logger(args):
     # Create Tensorboard writer
     tb_writer = None
     if TENSORBOARD_FOUND:
-        tb_writer = SummaryWriter(args.model_path)
+        tb_writer = SummaryWriter(args.model_path) # (gs) D:\3d-reconstruction\gs-hci>tensorboard --logdir ./output
     else:
         print("Tensorboard not available: not logging progress")
     return tb_writer
@@ -260,7 +260,7 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000]) # tensorboard save eval
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[10, 500, 1_000, 2_000, 7_000, 30_000]) # tensorboard save eval
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
