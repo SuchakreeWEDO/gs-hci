@@ -12,7 +12,7 @@
 import os
 import torch
 from random import randint
-from utils.loss_utils import l1_loss, ssim
+from utils.loss_utils import l1_loss, ssim, pearson_depth_loss
 from gaussian_renderer import render, network_gui
 import sys
 from scene import Scene, GaussianModel
@@ -22,10 +22,14 @@ from tqdm import tqdm
 from utils.image_utils import psnr
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
+from torchvision.utils import save_image
+import numpy as np
+
 from datetime import datetime
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
+    print("TENSORBOARD_FOUND !!")
 except ImportError:
     TENSORBOARD_FOUND = False
 
@@ -49,6 +53,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
+
+    count_refresh = 0
+
     for iteration in range(first_iter, opt.iterations + 1):        
         if network_gui.conn == None:
             network_gui.try_connect()
@@ -76,7 +83,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # Pick a random Camera
         if not viewpoint_stack:
             viewpoint_stack = scene.getTrainCameras().copy()
-        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
+            count_refresh += 1
+        
+        rand_this_iter = randint(0, len(viewpoint_stack)-1)
+        viewpoint_cam = viewpoint_stack.pop(rand_this_iter)
+        img_name = viewpoint_cam.image_name
 
         # Render
         if (iteration - 1) == debug_from:
@@ -86,14 +97,46 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         render_pkg = render(viewpoint_cam, gaussians, pipe, bg)
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
-
         depth_map, weight_map = render_pkg["depth_map"], render_pkg["weight_map"]
-        # print("Rendered Image", image.shape) # torch.Size([3, 1200, 1600])
-        # print("Rendered Depth Map", depth_map.shape)
-        # print("Rendered Weight Map", weight_map.shape)
 
-        # Visualize Depth MAp and Weight Map
-        # Caluculate Depth Loss then add to total loss for backward
+        # Visualize Depth Map and Weight Map
+        if not os.path.exists(f'{scene.model_path}/save_imgs/'):
+            os.makedirs(f'{scene.model_path}/save_imgs/')
+        if not os.path.exists(f'{scene.model_path}/save_imgs/{img_name}'):
+            os.makedirs(f'{scene.model_path}/save_imgs/{img_name}')
+
+        save_imgs_path = f"{scene.model_path}/save_imgs/{img_name}/"
+
+        if count_refresh % 20 == 0 or iteration == 7000 or iteration == 30000:
+
+            print("-"*30)
+
+            original_img = viewpoint_cam.original_image
+            save_image(original_img, f'{save_imgs_path}{img_name}_original_img_{iteration}.png')
+            # print("Original Image", torch.min(original_img).item(), torch.max(original_img).item())
+            print("Original Image", original_img.shape) # torch.Size([3, 1200, 1600]) # range [0,1]
+
+            save_image(image, f'{save_imgs_path}{img_name}_rendered_img_{iteration}.png')
+            # print("Rendered Image", torch.min(image).item(), torch.max(image).item())
+            print("Rendered Image", image.shape) # torch.Size([3, 1200, 1600]) # range [0,1]
+
+            save_image(weight_map, f'{save_imgs_path}{img_name}_weight_{iteration}.png')
+            # print("Weight", torch.min(weight_map).item(), torch.max(weight_map).item())
+            print("Rendered Weight Map", weight_map.shape) # torch.Size([1200, 1600]) # range [0,1]
+
+            # also save Raw values of Depth
+            print("Depth", torch.min(depth_map).item(), torch.max(depth_map).item())
+            # print("Rendered Depth Map", depth_map.shape) # torch.Size([1200, 1600]) # range is [0,inf]
+            np.save( f'{save_imgs_path}{img_name}_depth_{iteration}', depth_map.clone().detach().cpu().numpy() )
+            
+            # Min Max Normalize Depth to range [0,1] and inverse balck-white before saving as image
+            depth_map = 1 - ( ( depth_map - torch.min(depth_map) ) / ( torch.max(depth_map) - torch.min(depth_map) ) )
+            save_image(depth_map.clone().detach().cpu(), f'{save_imgs_path}{img_name}_depth_{iteration}.png')
+            print("Norm Depth", torch.min(depth_map).item(), torch.max(depth_map).item())
+
+            
+        # TODO : Caluculate Depth Loss then add to total loss for backward
+        # l_depth = pearson_depth_loss(depth_src = monogt_depth, depth_target = depth_map, box_p, p_corr)
 
         # Loss
         gt_image = viewpoint_cam.original_image.cuda()
@@ -217,12 +260,12 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 30_000]) # tensorboard save eval
     parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 30_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
-    parser.add_argument('--auto_checkpoint', action='store_true', default=False)
+    parser.add_argument('--auto_checkpoint', action='store_true', default=True)
     args = parser.parse_args(sys.argv[1:])
     args.model_name = os.path.splitext(os.path.basename(args.source_path))[0]
     print("Optimizing " + args.model_name)
