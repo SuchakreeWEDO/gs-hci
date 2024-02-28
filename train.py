@@ -25,6 +25,7 @@ from arguments import ModelParams, PipelineParams, OptimizationParams
 from torchvision.utils import save_image
 import numpy as np
 
+from datetime import datetime
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -194,7 +195,9 @@ def prepare_output_and_logger(args):
             unique_str=os.getenv('OAR_JOB_ID')
         else:
             unique_str = str(uuid.uuid4())
-        args.model_path = os.path.join("./output/", unique_str[0:10])
+        time = datetime.now().strftime("%y%m%d_%I-%M-%S")
+        # args.model_path = os.path.join("./output/", f"{args.model_name}_{unique_str[0:10]}")
+        args.model_path = os.path.join("./output/", f"{args.model_name}_{time}")
         
     # Set up output folder
     print("Output folder: {}".format(args.model_path))
@@ -264,9 +267,8 @@ if __name__ == "__main__":
     parser.add_argument("--start_checkpoint", type=str, default = None)
     parser.add_argument('--auto_checkpoint', action='store_true', default=True)
     args = parser.parse_args(sys.argv[1:])
-    args.save_iterations.append(args.iterations)
-    
-    print("Optimizing " + args.model_path)
+    args.model_name = os.path.splitext(os.path.basename(args.source_path))[0]
+    print("Optimizing " + args.model_name)
 
     # Initialize system state (RNG)
     safe_state(args.quiet)
