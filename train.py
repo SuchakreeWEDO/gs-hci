@@ -101,94 +101,25 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
         depth_map, weight_map = render_pkg["depth_map"], render_pkg["weight_map"]
 
-        # Visualize Depth Map and Weight Map
-        # if count_refresh % 20 == 0 or iteration == 7000 or iteration == 30000:
-
-            # if not os.path.exists(f'{scene.model_path}/save_imgs/'):
-            #     os.makedirs(f'{scene.model_path}/save_imgs/')
-            # if not os.path.exists(f'{scene.model_path}/save_imgs/{img_name}'):
-            #     os.makedirs(f'{scene.model_path}/save_imgs/{img_name}')
-
-            # save_imgs_path = f"{scene.model_path}/save_imgs/{img_name}/"
-
-            # print("-"*30)
-
-            # original_img = viewpoint_cam.original_image
-
-            # save_image(original_img, f'{save_imgs_path}{img_name}_original_img_{iteration}.png')
-            # print("Original Image", torch.min(original_img).item(), torch.max(original_img).item())
-            # print("Original Image", original_img.shape) # torch.Size([3, 1200, 1600]) # range [0,1]
-
-            # save_image(image, f'{save_imgs_path}{img_name}_rendered_img_{iteration}.png')
-            # print("Rendered Image", torch.min(image).item(), torch.max(image).item())
-            # print("Rendered Image", image.shape) # torch.Size([3, 1200, 1600]) # range [0,1]
-
-            # save_image(weight_map, f'{save_imgs_path}{img_name}_weight_{iteration}.png')
-            # print("Weight", torch.min(weight_map).item(), torch.max(weight_map).item())
-            # print("Rendered Weight Map", weight_map.shape) # torch.Size([1200, 1600]) # range [0,1]
-
-            # also save Raw values of Depth
-            # print("Depth", torch.min(depth_map).item(), torch.max(depth_map).item())
-            # print("Rendered Depth Map", depth_map.shape) # torch.Size([1200, 1600]) # range is [0,inf]
-            # np.save( f'{save_imgs_path}{img_name}_depth_{iteration}', depth_map.clone().detach().cpu().numpy() )
-            
-            # Min Max Normalize Depth to range [0,1] and inverse balck-white before saving as image
-            # depth_map = 1 - ( ( depth_map - torch.min(depth_map) ) / ( torch.max(depth_map) - torch.min(depth_map) ) )
-            # save_image(depth_map.clone().detach().cpu(), f'{save_imgs_path}{img_name}_depth_{iteration}.png')
-            # print("Norm Depth", torch.min(depth_map).item(), torch.max(depth_map).item())
-
-            
-        # TODO : Caluculate Depth Loss then add to total loss for backward and add to tensor board
-        
-
-        if args.method == "gs-depth":
-            
-            lambda_depth = 0.1
-
-            depth_map = 1 - ( ( depth_map - torch.min(depth_map) ) / ( torch.max(depth_map) - torch.min(depth_map) ) )
-
-            # Open ModoDepth Image
-            print("scene.source_path", scene.source_path) # D:\3d-reconstruction\datasets\android-img-fixisoae
-            mono_depth_path = os.path.join(scene.source_path, "depth", f"{img_name}_depth.png")
-            print(mono_depth_path)
-            mono_depth = Image.open(mono_depth_path)
-            mono_depth = ImageOps.grayscale(mono_depth) 
-            print(mono_depth)
-
-            orig_w, orig_h = depth_map.shape[1], depth_map.shape[0] # get size from rendered depth map
-
-            resolution_scale = scene.resolution_scales[0]
-            resolution = args.resolution
-
-            if resolution == -1:
-                if orig_w > 1600:
-                    print("[ INFO ] Encountered quite large input images (>1.6K pixels width), rescaling to 1.6K.\n "
-                        "If this is not desired, please explicitly specify '--resolution/-r' as 1")
-                    global_down = orig_w / 1600
-                else:
-                    global_down = 1
-            else:
-                global_down = orig_w / resolution
-
-            scale = float(global_down) * float(resolution_scale)
-            resolution = (int(orig_w / scale), int(orig_h / scale))
-
-            resized_mono_depth = PILtoTorch(mono_depth, resolution)
-            mono_depth = resized_mono_depth[:3, ...].squeeze(0)
-
-            print(mono_depth.shape, depth_map.shape)
-            assert mono_depth.shape == depth_map.shape, "monodepth and depth map must be the same shape !!"
-
-            l_depth = local_pearson_loss(depth_src = mono_depth, depth_target = depth_map, box_p=128, p_corr=0.5)
-
-
-        # Loss
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
 
-        loss = ((1.0 - opt.lambda_dssim) * Ll1 ) + ( opt.lambda_dssim * (1.0 - ssim(image, gt_image))) + (lambda_depth * l_depth)
-        loss.backward()
+        if args.method == "gs-depth":
+            # Min Max norm depth map to get range within [0,1]
+            # also subtract 1 bc from observation this depth map is inverse of monodepth
+            depth_map = 1 - ( ( depth_map - torch.min(depth_map) ) / ( torch.max(depth_map) - torch.min(depth_map) ) )
+            mono_depth = get_monodepth_img(img_name, depth_map, scene, args)
+            # Loss with Depth loss
+            lambda_depth = 0.1
+            l_depth = local_pearson_loss(depth_src = mono_depth, depth_target = depth_map, box_p=128, p_corr=0.5)
 
+        else: # if NO depth in method set all depth loss always = 0
+            lambda_depth = 0
+            l_depth      = 0
+
+        loss = ((1.0 - opt.lambda_dssim) * Ll1 ) + ( opt.lambda_dssim * (1.0 - ssim(image, gt_image))) + (lambda_depth * l_depth)
+
+        loss.backward()
         iter_end.record()
 
         with torch.no_grad():
@@ -233,6 +164,39 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 print("\n[ITER {}] Saving Auto-checkpoint at ".format(iteration, scene.model_path + "/checkpoint.pth"))
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/checkpoint.pth")
 
+
+def get_monodepth_img(img_name, depth_map, scene, args):
+    orig_w, orig_h = depth_map.shape[1], depth_map.shape[0] # get size from rendered depth map
+
+    resolution_scale = scene.resolution_scales[0]
+    resolution = args.resolution
+
+    if resolution == -1:
+        if orig_w > 1600:
+            print("[ INFO ] Encountered quite large input images (>1.6K pixels width), rescaling to 1.6K.\n "
+                "If this is not desired, please explicitly specify '--resolution/-r' as 1")
+            global_down = orig_w / 1600
+        else:
+            global_down = 1
+    else:
+        global_down = orig_w / resolution
+
+    scale = float(global_down) * float(resolution_scale)
+    resolution = (int(orig_w / scale), int(orig_h / scale))
+
+    # Open ModoDepth Image
+    mono_depth_path = os.path.join(scene.source_path, "depth", f"{img_name}_depth.png")
+    mono_depth = Image.open(mono_depth_path)
+    mono_depth = ImageOps.grayscale(mono_depth) 
+
+    resized_mono_depth = PILtoTorch(mono_depth, resolution)
+    mono_depth = resized_mono_depth[:3, ...].squeeze(0).to('cuda')
+
+    # print(mono_depth.shape, depth_map.shape)
+    assert mono_depth.shape == depth_map.shape, "monodepth and depth map must be the same shape !!"
+    return mono_depth
+
+
 def prepare_output_and_logger(args):    
     if not args.model_path:
         if os.getenv('OAR_JOB_ID'):
@@ -252,7 +216,7 @@ def prepare_output_and_logger(args):
     # Create Tensorboard writer
     tb_writer = None
     if TENSORBOARD_FOUND:
-        tb_writer = SummaryWriter(args.model_path) # (gs) D:\3d-reconstruction\gs-hci>tensorboard --logdir ./output
+        tb_writer = SummaryWriter(args.model_path)
     else:
         print("Tensorboard not available: not logging progress")
     return tb_writer
@@ -260,9 +224,9 @@ def prepare_output_and_logger(args):
 def training_report(tb_writer, iteration, Ll1, loss, l1_loss, l_depth, elapsed, testing_iterations, scene : Scene, renderFunc, renderArgs):
     if tb_writer:
         tb_writer.add_scalar('train_loss_patches/l1_loss', Ll1.item(), iteration)
-        tb_writer.add_scalar('train_loss_patches/l_depth', l_depth.item(), iteration)
         tb_writer.add_scalar('train_loss_patches/total_loss', loss.item(), iteration)
         tb_writer.add_scalar('iter_time', elapsed, iteration)
+        tb_writer.add_scalar('train_loss_patches/l_depth', l_depth.item(), iteration)
 
     # Report test and samples of training set
     if iteration in testing_iterations:
@@ -274,21 +238,35 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, l_depth, elapsed, 
             if config['cameras'] and len(config['cameras']) > 0:
                 l1_test = 0.0
                 psnr_test = 0.0
+                l_depth_test = 0.0
                 for idx, viewpoint in enumerate(config['cameras']):
+                    img_name = viewpoint.image_name 
                     image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0)
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
-                    if tb_writer and (idx < 5):
+
+                    depth_map = renderFunc(viewpoint, scene.gaussians, *renderArgs)["depth_map"]
+                    depth_map = 1 - ( ( depth_map - torch.min(depth_map) ) / ( torch.max(depth_map) - torch.min(depth_map) ) )
+                    mono_depth = get_monodepth_img(img_name, depth_map, scene, args)
+
+                    if tb_writer and (idx < 5): # save only first 5 images of train or test set
+                        # Image to tb must be shape (N,C,H,W)
                         tb_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name), image[None], global_step=iteration)
-                        if iteration == testing_iterations[0]:
+                        tb_writer.add_images(config['name'] + "_view_{}/depth_map".format(viewpoint.image_name), depth_map[None, None], global_step=iteration)
+
+                        if iteration == testing_iterations[0]: # save groundtruth img only at the first test iteration
                             tb_writer.add_images(config['name'] + "_view_{}/ground_truth".format(viewpoint.image_name), gt_image[None], global_step=iteration)
+                            tb_writer.add_images(config['name'] + "_view_{}/monodepth".format(viewpoint.image_name), mono_depth[None, None], global_step=iteration)
                     l1_test += l1_loss(image, gt_image).mean().double()
                     psnr_test += psnr(image, gt_image).mean().double()
+                    l_depth_test += local_pearson_loss(depth_src = mono_depth, depth_target = depth_map, box_p=128, p_corr=0.5)
                 psnr_test /= len(config['cameras'])
-                l1_test /= len(config['cameras'])          
-                print("\n[ITER {}] Evaluating {}: L1 {} PSNR {}".format(iteration, config['name'], l1_test, psnr_test))
+                l1_test /= len(config['cameras'])  
+                l_depth_test /= len(config['cameras'])
+                print("\n[ITER {}] Evaluating {}: L1 {} PSNR {} L_depth {} ".format(iteration, config['name'], l1_test, psnr_test, l_depth_test))
                 if tb_writer:
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l1_loss', l1_test, iteration)
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - psnr', psnr_test, iteration)
+                    tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l_depth', l_depth_test, iteration)
 
         if tb_writer:
             tb_writer.add_histogram("scene/opacity_histogram", scene.gaussians.get_opacity, iteration)

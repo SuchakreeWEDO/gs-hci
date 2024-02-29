@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
 from math import exp, floor
-from scipy.stats import pearsonr
+import numpy as np
 
 def l1_loss(network_output, gt):
     return torch.abs((network_output - gt)).mean()
@@ -90,6 +90,41 @@ def local_pearson_loss(depth_src, depth_target, box_p, p_corr):
     return _loss / n_corr
 
 # by fabby bc SparseGS did not provide the 'pearson_depth_loss' function
-def pearson_depth_loss(x, y):
-    r, p = pearsonr(x, y)
-    return r
+# Tested to output the same r (stats) value as scipy.pearsonr up to 15 decimal points
+# ref: https://github.com/scipy/scipy/blob/v1.12.0/scipy/stats/_stats_py.py#L4492-L4829
+def pearson_depth_loss(x,y):
+    '''torch version of scipy.pearsonr => output range [-1,1]
+    Positive correlations imply that as x increases, so does y.
+    Negative correlations imply that as x increases, y decreases.'''
+
+    n = len(x)
+    if n != len(y):
+        raise ValueError('x and y must have the same length.')
+
+    if n < 2:
+        raise ValueError('x and y must have length at least 2.')
+
+
+    if (x == x[0]).all() or (y == y[0]).all():
+        print("An input array is constant; the correlation coefficient "
+                "is not defined.")
+        return np.nan
+
+    xmean = torch.mean(x)
+    ymean = torch.mean(y)
+
+    xm = torch.sub(x, xmean)
+    ym = torch.sub(y, ymean)
+
+    normxm = torch.linalg.norm(xm)
+    normym = torch.linalg.norm(ym)
+    
+    r = torch.matmul(xm/normxm, ym/normym)
+    
+    # Presumably, if abs(r) > 1, then it is only some small artifact of
+    # floating point arithmetic.
+    r = max(min(r, 1.0), -1.0)
+    
+    # correlation higher is good = score
+    # but we want to minimize loss so we add minus
+    return - r
