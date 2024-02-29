@@ -11,6 +11,10 @@ dependencies:
   - pytorch=1.12.1
   - torchaudio=0.12.1
   - torchvision=0.13.1
+  - gradio
+  - torch
+  - opencv-python
+  - huggingface_hub
   - tqdm
   - pip:
     - submodules/diff-gaussian-rasterization
