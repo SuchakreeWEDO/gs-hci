@@ -6,6 +6,7 @@ cd %workspace%\gaussian-splatting
 python convert.py -s %dataset%\gaussian_splatting\%target%
 
 python train.py -s ../datasets/android-img-fixisoae --method gs-depth --eval --auto_checkpoint
+python train.py -s ../datasets/android-img-fixisoae --method gs --eval --auto_checkpoint
 tensorboard --logdir ./output
 
 python render.py -m <path to trained model> # Generate renderings
