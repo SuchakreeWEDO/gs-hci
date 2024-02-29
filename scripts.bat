@@ -8,4 +8,5 @@ python convert.py -s %dataset%\gaussian_splatting\%target%
 python train.py -s ../datasets/android-img-fixisoae --method gs-depth --eval --auto_checkpoint
 tensorboard --logdir ./output
 
-cd C:\Users\sucha\workspace\gaussian-splatting
+python render.py -m <path to trained model> # Generate renderings
+python metrics.py -m <path to trained model> # Compute error metrics on renderings
