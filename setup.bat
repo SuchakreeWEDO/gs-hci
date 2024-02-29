@@ -1,0 +1,1 @@
+pip install -r ./depth_anything_requirements.txt

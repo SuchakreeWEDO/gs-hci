@@ -1,0 +1,6 @@
+# gradio_imageslider
+gradio
+torch
+torchvision
+opencv-python
+huggingface_hub
