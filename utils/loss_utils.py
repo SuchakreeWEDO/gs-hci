@@ -106,8 +106,12 @@ def pearson_depth_loss(x,y):
 
 
     if (x == x[0]).all() or (y == y[0]).all():
-        print("An input array is constant; the correlation coefficient "
-                "is not defined.")
+        if (x == x[0]).all():
+            print("monodepth array is constant; the correlation coefficient "
+                    "is not defined.")
+        if (y == y[0]).all():
+            print("depth_map array is constant; the correlation coefficient "
+                    "is not defined.")
         return 0
 
     xmean = torch.mean(x)

@@ -99,16 +99,31 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         render_pkg = render(viewpoint_cam, gaussians, pipe, bg)
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
-        depth_map, weight_map = render_pkg["depth_map"], render_pkg["weight_map"]
-
+        
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
 
-        if args.method == "gs-depth":
+        if args.method in ["gs-depth", "gsd2"]:
+            
+            depth_map, weight_map = render_pkg["depth_map"], render_pkg["weight_map"]
             # Min Max norm depth map to get range within [0,1]
             # also subtract 1 bc from observation this depth map is inverse of monodepth
             depth_map = 1 - ( ( depth_map - torch.min(depth_map) ) / ( torch.max(depth_map) - torch.min(depth_map) ) )
             mono_depth = get_monodepth_img(img_name, depth_map, scene, args)
+
+            if iteration == 1:
+                print("-"*30)
+                print("depth_map", depth_map.shape, depth_map.min().item(), depth_map.max().item())
+                print("mono_depth", mono_depth.shape, mono_depth.min().item(), mono_depth.max().item())
+
+            if args.method == "gsd2":
+                # min max norm monodepth again
+                mono_depth = ( mono_depth - torch.min(mono_depth) ) / ( torch.max(mono_depth) - torch.min(mono_depth) )
+
+                if iteration == 1:
+                    print("mono_depth after norm", mono_depth.shape, mono_depth.min().item(), mono_depth.max().item())
+                    print("-"*30)
+
             # Loss with Depth loss
             lambda_depth = 0.1
             l_depth = local_pearson_loss(depth_src = mono_depth, depth_target = depth_map, box_p=128, p_corr=0.5)
@@ -291,8 +306,8 @@ if __name__ == "__main__":
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
-    parser.add_argument("--test_iterations", nargs="+", type=int, default=[1_000, 3_000, 5_000, 7_000, 10_000, 13_000, 16_000, 20_000, 25_000, 30_000]) # tensorboard save eval
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[3_000, 5_000, 7_000, 10_000, 15_000, 20_000, 25_000, 30_000])
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[50, 1_000, 3_000, 5_000, 7_000, 10_000, 13_000, 16_000, 20_000, 25_000, 30_000]) # tensorboard save eval
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[50, 3_000, 5_000, 7_000, 10_000, 15_000, 20_000, 25_000, 30_000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)

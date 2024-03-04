@@ -8,8 +8,9 @@ python convert.py -s %dataset%\gaussian_splatting\%target%
 cd %workspace%/gaussian-splatting/Depth-Anything
 python run.py --encoder vitl --img-path %dataset%/gaussian_splatting/%target%/images --outdir %dataset%/gaussian_splatting/%target%/depth --pred-only --grayscale
 
-python train.py -s ../datasets/android-img-fixisoae --method gs-depth --eval --auto_checkpoint
-python train.py -s ../datasets/android-img-fixisoae --method gs --eval --auto_checkpoint
+cd %workspace%/gaussian-splatting/
+python train.py -s ../datasets/media_sony_fixediso --method gs-depth --eval --auto_checkpoint
+python train.py -s ../datasets/media_sony_fixediso --method gs --eval --auto_checkpoint
 tensorboard --logdir ./output
 
 python render.py -m <path to trained model> # Generate renderings
