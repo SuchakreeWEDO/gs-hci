@@ -104,30 +104,40 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         Ll1 = l1_loss(image, gt_image)
 
         if args.method in ["gs-depth", "gsd2"]:
+
+            if iteration <= args.depth_upto:
             
-            depth_map, weight_map = render_pkg["depth_map"], render_pkg["weight_map"]
-            # Min Max norm depth map to get range within [0,1]
-            # also subtract 1 bc from observation this depth map is inverse of monodepth
-            depth_map = 1 - ( ( depth_map - torch.min(depth_map) ) / ( torch.max(depth_map) - torch.min(depth_map) ) )
-            mono_depth = get_monodepth_img(img_name, depth_map, scene, args)
-
-            if iteration == 1:
-                print("-"*30)
-                print("depth_map", depth_map.shape, depth_map.min().item(), depth_map.max().item())
-                print("mono_depth", mono_depth.shape, mono_depth.min().item(), mono_depth.max().item())
-
-            if args.method == "gsd2":
-                # min max norm monodepth again
-                mono_depth = ( mono_depth - torch.min(mono_depth) ) / ( torch.max(mono_depth) - torch.min(mono_depth) )
+                depth_map, weight_map = render_pkg["depth_map"], render_pkg["weight_map"]
+                # Min Max norm depth map to get range within [0,1]
+                # also subtract 1 bc from observation this depth map is inverse of monodepth
+                depth_map = 1 - ( ( depth_map - torch.min(depth_map) ) / ( torch.max(depth_map) - torch.min(depth_map) ) )
+                mono_depth = get_monodepth_img(img_name, depth_map, scene, args)
 
                 if iteration == 1:
-                    print("mono_depth after norm", mono_depth.shape, mono_depth.min().item(), mono_depth.max().item())
                     print("-"*30)
+                    print(f"Add Depth Correlation Loss for the fisrt {args.depth_upto} epochs ...")
+                    print("depth_map", depth_map.shape, depth_map.min().item(), depth_map.max().item())
+                    print("mono_depth", mono_depth.shape, mono_depth.min().item(), mono_depth.max().item())
 
-            # Loss with Depth loss
-            lambda_depth = 0.1
-            l_depth = local_pearson_loss(depth_src = mono_depth, depth_target = depth_map, box_p=128, p_corr=0.5)
-            loss = ((1.0 - opt.lambda_dssim) * Ll1 ) + ( opt.lambda_dssim * (1.0 - ssim(image, gt_image))) + (lambda_depth * l_depth)
+                if args.method == "gsd2":
+                    # min max norm monodepth again
+                    mono_depth = ( mono_depth - torch.min(mono_depth) ) / ( torch.max(mono_depth) - torch.min(mono_depth) )
+
+                    if iteration == 1:
+                        print("mono_depth after norm", mono_depth.shape, mono_depth.min().item(), mono_depth.max().item())
+                        print("-"*30)
+
+                # Loss with Depth loss
+                lambda_depth = 0.1
+                l_depth = local_pearson_loss(depth_map, mono_depth, box_p=128, p_corr=0.5)
+                loss = ((1.0 - opt.lambda_dssim) * Ll1 ) + ( opt.lambda_dssim * (1.0 - ssim(image, gt_image))) + (lambda_depth * l_depth)
+            else:
+                if iteration == args.depth_upto+1:
+                    print("-"*30)
+                    print("No Depth Correlation Loss after this ...")
+                    print("-"*30)
+                l_depth = None
+                loss = ((1.0 - opt.lambda_dssim) * Ll1 ) + ( opt.lambda_dssim * (1.0 - ssim(image, gt_image)))
 
         if args.method == "gs":
             l_depth = None
@@ -240,7 +250,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, l_depth, elapsed, 
         tb_writer.add_scalar('train_loss_patches/l1_loss', Ll1.item(), iteration)
         tb_writer.add_scalar('train_loss_patches/total_loss', loss.item(), iteration)
         tb_writer.add_scalar('iter_time', elapsed, iteration)
-        if args.method == "gs-depth":
+        if args.method == "gs-depth" and iteration <= args.depth_upto:
             tb_writer.add_scalar('train_loss_patches/l_depth', l_depth.item(), iteration)
 
     # Report test and samples of training set
@@ -259,7 +269,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, l_depth, elapsed, 
                     image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0)
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
 
-                    if args.method == "gs-depth":
+                    if args.method == "gs-depth" and iteration <= args.depth_upto:
                         depth_map = renderFunc(viewpoint, scene.gaussians, *renderArgs)["depth_map"]
                         depth_map = 1 - ( ( depth_map - torch.min(depth_map) ) / ( torch.max(depth_map) - torch.min(depth_map) ) )
                         mono_depth = get_monodepth_img(img_name, depth_map, scene, args)
@@ -267,28 +277,28 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, l_depth, elapsed, 
                     if tb_writer and (idx < 5): # save only first 5 images of train or test set
                         # Image to tb must be shape (N,C,H,W)
                         tb_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name), image[None], global_step=iteration)
-                        if args.method == "gs-depth":
+                        if args.method == "gs-depth" and iteration <= args.depth_upto:
                             tb_writer.add_images(config['name'] + "_view_{}/depth_map".format(viewpoint.image_name), depth_map[None, None], global_step=iteration)
 
                         if iteration == testing_iterations[0]: # save groundtruth img only at the first test iteration
                             tb_writer.add_images(config['name'] + "_view_{}/ground_truth".format(viewpoint.image_name), gt_image[None], global_step=iteration)
-                            if args.method == "gs-depth":
+                            if args.method == "gs-depth" and iteration <= args.depth_upto:
                                 tb_writer.add_images(config['name'] + "_view_{}/monodepth".format(viewpoint.image_name), mono_depth[None, None], global_step=iteration)
                     l1_test += l1_loss(image, gt_image).mean().double()
                     psnr_test += psnr(image, gt_image).mean().double()
-                    if args.method == "gs-depth":
-                        l_depth_test += local_pearson_loss(depth_src = mono_depth, depth_target = depth_map, box_p=128, p_corr=0.5)
+                    if args.method == "gs-depth" and iteration <= args.depth_upto:
+                        l_depth_test += local_pearson_loss(depth_map, mono_depth, box_p=128, p_corr=0.5)
                 psnr_test /= len(config['cameras'])
                 l1_test /= len(config['cameras'])  
-                if args.method == "gs-depth":
+                if args.method == "gs-depth" and iteration <= args.depth_upto:
                     l_depth_test /= len(config['cameras'])
                     print("\n[ITER {}] Evaluating {}: L1 {} PSNR {} L_depth {} ".format(iteration, config['name'], l1_test, psnr_test, l_depth_test))
-                if args.method == "gs":
+                if args.method == "gs" and iteration <= args.depth_upto:
                     print("\n[ITER {}] Evaluating {}: L1 {} PSNR {} ".format(iteration, config['name'], l1_test, psnr_test))
                 if tb_writer:
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l1_loss', l1_test, iteration)
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - psnr', psnr_test, iteration)
-                    if args.method == "gs-depth":
+                    if args.method == "gs-depth" and iteration <= args.depth_upto:
                         tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l_depth', l_depth_test, iteration)
 
         if tb_writer:

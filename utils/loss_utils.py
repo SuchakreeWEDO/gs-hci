@@ -63,18 +63,18 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True):
     else:
         return ssim_map.mean(1).mean(1).mean(1)
 
-def local_pearson_loss(depth_src, depth_target, box_p, p_corr):
+def local_pearson_loss(depth_map, mono_depth, box_p, p_corr):
     ''' We apply the depth correlation loss every iteration with a
     patch size of 128 pixels and select 50% of all patches per iteration
     We choose λ_depth = 0.1 
-    box_p = patch_size 128 ?
-    p_corr = ratio of selected patches 0.5 ? '''
+    box_p = patch_size 128 => (128,128)
+    p_corr = ratio of selected patches 0.5  '''
 
     # Randomly select patch, top left corner of the patch (x_0,y_0) has to be 0 <= x_0 <= max_h, 0 <= y_0 <= max_w
-    num_box_h = floor(depth_src.shape[0] / box_p)
-    num_box_w = floor(depth_src.shape[1] / box_p)
-    max_h = depth_src.shape[0] - box_p
-    max_w = depth_src.shape[1] - box_p
+    num_box_h = floor(depth_map.shape[0] / box_p)
+    num_box_w = floor(depth_map.shape[1] / box_p)
+    max_h = depth_map.shape[0] - box_p
+    max_w = depth_map.shape[1] - box_p
 
     # Select the number of boxes based on hyperparameter p_corr
     n_corr = int(p_corr * num_box_h * num_box_w)
@@ -84,9 +84,12 @@ def local_pearson_loss(depth_src, depth_target, box_p, p_corr):
     y_1 = y_0 + box_p
 
     _loss = torch.tensor(0.0,device='cuda')
-                         
+    
+    # print("number of patches", len(x_0))
     for i in range(len(x_0)):
-        _loss += pearson_depth_loss(depth_src[x_0[i]:x_1[i],y_0[i]:y_1[i]].reshape(-1), depth_target[x_0[i]:x_1[i],y_0[i]:y_1[i]].reshape(-1))
+        # print("mono_depth", mono_depth[x_0[i]:x_1[i],y_0[i]:y_1[i]].shape)
+
+        _loss += pearson_depth_loss(depth_map[x_0[i]:x_1[i],y_0[i]:y_1[i]].reshape(-1), mono_depth[x_0[i]:x_1[i],y_0[i]:y_1[i]].reshape(-1))
     return _loss / n_corr
 
 # by fabby bc SparseGS did not provide the 'pearson_depth_loss' function
@@ -107,10 +110,10 @@ def pearson_depth_loss(x,y):
 
     if (x == x[0]).all() or (y == y[0]).all():
         if (x == x[0]).all():
-            print("monodepth array is constant; the correlation coefficient "
+            print(f"depth_map array is constant at {x[0]}; the correlation coefficient "
                     "is not defined.")
         if (y == y[0]).all():
-            print("depth_map array is constant; the correlation coefficient "
+            print(f"monodepth array is constant at {y[0]}; the correlation coefficient "
                     "is not defined.")
         return 0
 
@@ -127,7 +130,7 @@ def pearson_depth_loss(x,y):
     
     # Presumably, if abs(r) > 1, then it is only some small artifact of
     # floating point arithmetic.
-    r = max(min(r, 1.0), -1.0)
+    r = torch.maximum(torch.minimum(r, torch.tensor(1.0)), torch.tensor(-1.0))
     
     # correlation higher is good = score
     # but we want to minimize loss so we add minus
