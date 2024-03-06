@@ -111,7 +111,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 # also subtract 1 bc from observation this depth map is inverse of monodepth
                 depth_map = 1 - ( ( depth_map - torch.min(depth_map) ) / ( torch.max(depth_map) - torch.min(depth_map) ) )
 
-                if iteration == 1:
+                if iteration == first_iter:
                     print("-"*30)
                     print(f"Add Depth Correlation Loss for the fisrt {args.depth_upto} epochs ...")
                     print("Loading all monodepth images into all_monodepth_dict at first iter ...")
@@ -120,7 +120,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     all_monodepth_dict = get_all_monodepth_dict(scene.source_path, resolution)
                 # mono_depth of this img
                 mono_depth = all_monodepth_dict[img_name].to('cuda')
-                if iteration == 1:    
+                if iteration == first_iter:    
                     print("depth_map", depth_map.shape, depth_map.min().item(), depth_map.max().item())
                     print("mono_depth", mono_depth.shape, mono_depth.min().item(), mono_depth.max().item())
                     assert mono_depth.shape == depth_map.shape, "monodepth must have the same resolution as depth_map !!"
@@ -130,6 +130,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 l_depth = local_pearson_loss(depth_map, mono_depth, box_p=128, p_corr=0.5)
                 loss = ((1.0 - opt.lambda_dssim) * Ll1 ) + ( opt.lambda_dssim * (1.0 - ssim(image, gt_image))) + (lambda_depth * l_depth)
             else:
+                all_monodepth_dict = None
                 if iteration == args.depth_upto+1:
                     print("-"*30)
                     print("No Depth Correlation Loss after this ...")
