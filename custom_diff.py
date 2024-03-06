@@ -19,14 +19,19 @@ import tkinter as tk
 
 from datetime import datetime
 def test_diff(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, auto_checkpoint):
+    first_iter = 0
     gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians)
+    gaussians.training_setup(opt)
+    if checkpoint:
+        (model_params, first_iter) = torch.load(checkpoint)
+        gaussians.restore(model_params, opt)
 
 
 
     cameras = scene.getTrainCameras().copy()
     print("total view: ", len(cameras))
-    viewpoint_cam = cameras[1] 
+    viewpoint_cam = cameras[5] 
     print("method:", dataset.method)
 
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
