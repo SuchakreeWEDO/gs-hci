@@ -35,7 +35,7 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
-DEPTH_FAMILY = ["gs-depth", "gs-depth-05", "gs-depth-15"]
+DEPTH_FAMILY = ["gs-depth", "gs-depth-05", "gs-depth-15", "gs-depth-linear"]
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, auto_checkpoint):
     first_iter = 0

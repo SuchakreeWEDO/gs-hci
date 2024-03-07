@@ -53,7 +53,7 @@ class ModelParams(ParamGroup):
         self._resolution = -1
         self._white_background = False
         self.data_device = "cuda"
-        self.eval = False
+        self.eval = True
         self.model_name = ""
         self.method = "gs"
         self.depth_upto = 30_000
