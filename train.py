@@ -35,7 +35,7 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
-DEPTH_FAMILY = ["gs-depth", "gs-depth-05", "gs-depth-15", "gs-depth-linear"]
+DEPTH_FAMILY = ["gs-depth", "gs-depth-05", "gs-depth-15", "gs-depth-decrease"]
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, auto_checkpoint):
     first_iter = 0
@@ -59,6 +59,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     first_iter += 1
 
     count_refresh = 0
+
+    depth_decrease = 0.001
+    depth_value = 0.2
 
     print("depth upto:", args.depth_upto)
     
@@ -137,6 +140,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     lambda_depth = 0.05
                 elif(args.method == "gs-depth-15"):
                     lambda_depth = 0.15
+                elif(args.method == "gs-depth-decrease"):
+                    depth_value = max(0, depth_value - depth_decrease)
+                    lambda_depth = depth_value
                 l_depth = local_pearson_loss(depth_map, mono_depth, box_p=128, p_corr=0.5)
                 loss = ((1.0 - opt.lambda_dssim) * Ll1 ) + ( opt.lambda_dssim * (1.0 - ssim(image, gt_image))) + (lambda_depth * l_depth)
             else:
