@@ -13,3 +13,6 @@
 [submodule "Depth-Anything"]
 	path = Depth-Anything
 	url = https://github.com/LiheYoung/Depth-Anything
+[submodule "submodules/diff-gaussian-rasterization-depth-acc-main"]
+	path = submodules/diff-gaussian-rasterization-depth-acc-main
+	url = https://github.com/robot0321/diff-gaussian-rasterization-depth-acc.git

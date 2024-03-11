@@ -112,7 +112,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if args.method in DEPTH_FAMILY:
 
             if iteration <= args.depth_upto:
-                depth_map, weight_map = render_pkg["depth_map"], render_pkg["weight_map"]
+                depth_map = render_pkg["depth_map"]
                 # Min Max norm depth map to get range within [0,1]
                 # also subtract 1 bc from observation this depth map is inverse of monodepth
                 depth_map = 1 - ( ( depth_map - torch.min(depth_map) ) / ( torch.max(depth_map) - torch.min(depth_map) ) )
@@ -194,13 +194,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 print("\ncheckpoint path: {}".format(scene.model_path + "/chkpnt" + str(iteration) + ".pth"))
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
 
-            if (auto_checkpoint and (iteration % 500 == 0)):
+            if (auto_checkpoint and (iteration % 1000 == 0)):
                 print("\n[ITER {}] Saving Auto-checkpoint at ".format(iteration, scene.model_path + "/checkpoint.pth"))
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/checkpoint.pth")
 
 def get_all_monodepth_dict(source_path, resolution):
     all_files = [join(join(source_path, "depth", f)) for f in os.listdir(join(source_path, "depth")) if isfile(join(join(source_path, "depth", f)))]
-    all_img_name = [f.split('_')[0] for f in os.listdir(join(source_path, "depth")) if isfile(join(join(source_path, "depth", f)))]
+    # all_img_name = [f.split('_')[0] for f in os.listdir(join(source_path, "depth")) if isfile(join(join(source_path, "depth", f)))]
+    all_img_name = ['_'.join(f.split('_')[:2]) for f in os.listdir(join(source_path, "depth")) if isfile(join(join(source_path, "depth", f)))]
     all_monodepth_dict = {k:[] for k in all_img_name}
     for file, img_name in zip(all_files, all_img_name):
         mono_depth = Image.open(file)
