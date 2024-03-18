@@ -28,6 +28,13 @@ class Camera(nn.Module):
         self.FoVx = FoVx
         self.FoVy = FoVy
         self.image_name = image_name
+        
+        # print(R.shape) # (3,3)
+        # print(R)
+        # print(T.shape) # (3,)
+        # print(T)
+        # print(np.min(R), np.max(R))
+        # print(np.min(T), np.max(T))
 
         try:
             self.data_device = torch.device(data_device)
