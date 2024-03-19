@@ -32,7 +32,7 @@ class Camera(nn.Module):
         # print(R.shape) # (3,3)
         # print(R)
         # print(T.shape) # (3,)
-        # print(T)
+        # # print(T)
         # print(np.min(R), np.max(R))
         # print(np.min(T), np.max(T))
 
