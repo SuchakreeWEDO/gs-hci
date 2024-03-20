@@ -69,7 +69,6 @@ def main(dataset, opt, pipe, checkpoint) -> None:
         )
 
     gaussians = GaussianModel(dataset.sh_degree)
-    scene = Scene(dataset, gaussians)
     gaussians.training_setup(opt)
     (model_params, first_iter) = torch.load(checkpoint)
     gaussians.restore(model_params, opt)
@@ -77,9 +76,6 @@ def main(dataset, opt, pipe, checkpoint) -> None:
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
     bg = torch.rand((3), device="cuda") if opt.random_background else background
-
-    views = scene.getTrainCameras()
-
 
     with torch.no_grad():
         while True:
@@ -106,8 +102,11 @@ def main(dataset, opt, pipe, checkpoint) -> None:
                 print(f"fov: {camera.fov}")
                 image = render(view, gaussians, pipe, bg)["render"]
 
+                image = torch.flip(image, dims=[2])
+
                 image_nd = image.detach().cpu().numpy().astype(np.float32)
                 image_nd = np.transpose(image_nd, (2, 1, 0))
+                
                 client.set_background_image(image_nd, format="jpeg")
 
 if __name__ == "__main__":
