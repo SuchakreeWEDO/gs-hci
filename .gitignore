@@ -12,3 +12,4 @@ output/
 dataset
 viewers
 fb_rendered*
+*.ply
