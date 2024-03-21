@@ -8,6 +8,8 @@ import time
 import sys
 from pathlib import Path
 
+import copy
+import numpy as np
 import viser
 import viser.transforms as tf
 from tqdm.auto import tqdm
@@ -52,18 +54,29 @@ def get_w2c(camera):
     return w2c
 
 
-def main(pipe, ply_path) -> None:
+def main(pipe, opt, ply_path) -> None:
     server = viser.ViserServer()
 
+    orig_gaus = GaussianModel(sh_degree = 3)
+    orig_gaus.training_setup(opt)
+    orig_gaus.viser_load_ply(ply_path)
+
+    xmean = torch.mean(orig_gaus._xyz[:,0]).cpu()
+    ymean = torch.mean(orig_gaus._xyz[:,1]).cpu()
+    zmean = torch.mean(orig_gaus._xyz[:,2]).cpu()
+    xmin, xmax = torch.min(orig_gaus._xyz[:,0]).cpu(), torch.max(orig_gaus._xyz[:,0]).cpu()
+    ymin, ymax = torch.min(orig_gaus._xyz[:,1]).cpu(), torch.max(orig_gaus._xyz[:,1]).cpu()
+    zmin, zmax = torch.min(orig_gaus._xyz[:,2]).cpu(), torch.max(orig_gaus._xyz[:,2]).cpu()
+
     box_position = server.add_gui_vector3(
-            "Size",
-            initial_value=(1.0, 1.0, 1.0),
+            "Box Position",
+            initial_value=(xmean, ymean, zmean),
             step=0.25,
         )
     
     box_size = server.add_gui_vector3(
-            "Size",
-            initial_value=(1.0, 1.0, 1.0),
+            "Box Size",
+            initial_value=(10.0, 10.0, 10.0),
             step=0.25,
         )
 
@@ -76,19 +89,20 @@ def main(pipe, ply_path) -> None:
     def _(event: viser.GuiEvent) -> None:
         client = event.client
         assert client is not None
-        client.camera.up_direction = tf.SO3(client.camera.wxyz) @ onp.array(
+        client.camera.up_direction = tf.SO3(client.camera.wxyz) @ np.array(
             [0.0, -1.0, 0.0]
         )
 
-    gaussians = GaussianModel(sh_degree = 3)
-    gaussians.load_ply(ply_path)
+    gui_save_ply = server.add_gui_button(
+        "Export .ply",
+    )
 
-    print(gaussians._xyz.shape)
-    print(gaussians._features_rest.shape)
-    print(gaussians._features_rest.shape)
-    print(gaussians._opacity.shape)
-    print(gaussians._scaling.shape)
-    print(gaussians._rotation.shape)
+    # print(orig_gaus._xyz.shape)
+    # print(orig_gaus._features_rest.shape)
+    # print(orig_gaus._features_rest.shape)
+    # print(orig_gaus._opacity.shape)
+    # print(orig_gaus._scaling.shape)
+    # print(orig_gaus._rotation.shape)
 
     bg_color = [0, 0, 0]
     bg = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -113,12 +127,28 @@ def main(pipe, ply_path) -> None:
                     uid=1
                 )
 
-                image = render(view, gaussians, pipe, bg)["render"]
+                # BBOX Masking
+                new_gaus = copy.copy(orig_gaus)
+                sizex, sizey, sizez = box_size.value
+                posx, posy, posz = box_position.value
+                x_cond = (posx - (sizex/2) >= new_gaus._xyz[:, 0]) | (new_gaus._xyz[:, 0] >= posx + (sizex/2))
+                y_cond = (posy - (sizey/2) >= new_gaus._xyz[:, 1]) | (new_gaus._xyz[:, 1] >= posy + (sizey/2))
+                z_cond = (posz - (sizez/2) >= new_gaus._xyz[:, 2]) | (new_gaus._xyz[:, 2] >= posz + (sizez/2))
+                mask = torch.where( (x_cond|y_cond|z_cond), True, False)
+                new_gaus.viser_prune_points(mask) # input = mask to be removed
+
+                image = render(view, new_gaus, pipe, bg)["render"]
                 image = torch.flip(image, dims=[2])
                 image_nd = image.detach().cpu().numpy().astype(np.float32)
                 image_nd = np.transpose(image_nd, (2, 1, 0))
                 
                 client.set_background_image(image_nd, format="jpeg")
+
+                @gui_save_ply.on_click
+                def _(event: viser.GuiEvent) -> None:
+                    client = event.client
+                    assert client is not None
+                    new_gaus.save_ply(f"./saved_point_cloud_{time.time()}.ply")
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Training script parameters")
@@ -134,9 +164,8 @@ if __name__ == "__main__":
     parser.add_argument("--ply", type=str, default = None)
 
     args = parser.parse_args(sys.argv[1:])
-    # args.save_iterations.append(args.iterations)
 
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    main( pp.extract(args), args.ply)
+    main( pp.extract(args),  op.extract(args), args.ply)
 
 # python view_server_crop.py --ply point_cloud.ply
