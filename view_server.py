@@ -18,6 +18,7 @@ import torch
 from gaussian_renderer import render
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
+import torchvision.transforms.functional as TF
 
 def qvec2rotmat(qvec):
     return np.array(
@@ -59,12 +60,26 @@ def main(dataset, opt, pipe, checkpoint) -> None:
         "Reset up direction",
         hint="Set the camera control 'up' direction to the current camera's 'up'.",
     )
+    # ui_position = server.add_gui_vector3(
+    #     "Position",
+    #     initial_value=(0, 0, 0),
+    #     step=0.25,
+    # )
+
+    ui_resolution = server.add_gui_slider(
+        "resolution",
+        min=450,
+        max=2560,
+        step=20,
+        initial_value=920,
+
+    )
 
     @gui_reset_up.on_click
     def _(event: viser.GuiEvent) -> None:
         client = event.client
         assert client is not None
-        client.camera.up_direction = tf.SO3(client.camera.wxyz) @ onp.array(
+        client.camera.up_direction = tf.SO3(client.camera.wxyz) @ np.array(
             [0.0, -1.0, 0.0]
         )
 
@@ -77,14 +92,22 @@ def main(dataset, opt, pipe, checkpoint) -> None:
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
     bg = torch.rand((3), device="cuda") if opt.random_background else background
 
+    prev_pos = {}
+
     with torch.no_grad():
         while True:
-            for client in server.get_clients().values():
+            for i, client in enumerate(server.get_clients().values()):
                 camera = client.camera
-                R = qvec2rotmat(camera.wxyz)
-                T = camera.position
-                W = 1920
-                H = int(1920/camera.aspect)
+                id = client.client_id
+
+                if(id not in prev_pos):
+                    prev_pos[id] = np.array([-1, -1, -1])
+                
+                R = np.transpose(qvec2rotmat(camera.wxyz))
+                T = np.array(camera.position)
+                resolution = ui_resolution.value if prev_pos[id].all == T.all else 450
+                W = resolution
+                H = int(resolution/camera.aspect)
                 focal_x = W/2/np.tan(camera.fov/2)
                 focal_y = H/2/np.tan(camera.fov/2)
                 # view = views[0]
@@ -99,15 +122,21 @@ def main(dataset, opt, pipe, checkpoint) -> None:
                     image_name="test",
                     uid=1
                 )
-                print(f"fov: {camera.fov}")
                 image = render(view, gaussians, pipe, bg)["render"]
 
-                image = torch.flip(image, dims=[2])
+                # image = torch.flip(image, dims=[2])
 
                 image_nd = image.detach().cpu().numpy().astype(np.float32)
                 image_nd = np.transpose(image_nd, (2, 1, 0))
-                
+
+                # ----------------------------------
+                # image_nd = TF.to_pil_image(image)  # Convert tensor to PIL Image
+                # image_nd = np.array(image_nd)
                 client.set_background_image(image_nd, format="jpeg")
+
+                prev_pos[id] = T
+
+
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Training script parameters")
