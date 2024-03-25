@@ -107,6 +107,14 @@ def main(pipe, opt, ply_path) -> None:
         "Export .ply",
     )
 
+    ui_resolution = server.add_gui_slider(
+        "resolution",
+        min=450,
+        max=2560,
+        step=20,
+        initial_value=920,
+
+    )
     # print(orig_gaus._xyz.shape)
     # print(orig_gaus._features_rest.shape)
     # print(orig_gaus._features_rest.shape)
@@ -116,15 +124,24 @@ def main(pipe, opt, ply_path) -> None:
 
     bg_color = [0, 0, 0]
     bg = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-
+    prev_pos = {}
+    
     with torch.no_grad():
         while True:
             for client in server.get_clients().values():
                 camera = client.camera
-                R = qvec2rotmat(camera.wxyz)
-                T = camera.position
-                W = 1920
-                H = int(1920/camera.aspect)
+                id = client.client_id
+
+                if(id not in prev_pos):
+                    prev_pos[id] = np.array([-1, -1, -1])
+                    camera.position = np.zeros(3)
+                    camera.wxyz = np.array([1, 0, 0, 0])
+
+                q = camera.wxyz
+                R = np.transpose(qvec2rotmat(np.array([q[0], q[2], q[1], q[3]])))
+                T = np.array([-camera.position[1], -camera.position[0], -camera.position[2]])
+                W = ui_resolution.value
+                H = int(W/camera.aspect)
                 view = Camera(
                     colmap_id= 1,
                     R= R,
@@ -151,7 +168,7 @@ def main(pipe, opt, ply_path) -> None:
                 new_gaus.viser_prune_points(mask) # input = mask to be removed
 
                 image = render(view, new_gaus, pipe, bg)["render"]
-                image = torch.flip(image, dims=[2])
+                # image = torch.flip(image, dims=[1])
                 image_nd = image.detach().cpu().numpy().astype(np.float32)
                 image_nd = np.transpose(image_nd, (2, 1, 0))
                 
