@@ -102,12 +102,14 @@ def main(dataset, opt, pipe, checkpoint) -> None:
 
                 if(id not in prev_pos):
                     prev_pos[id] = np.array([-1, -1, -1])
+                    camera.position = np.zeros(3)
+                    camera.wxyz = np.array([1, 0, 0, 0])
                 
-                R = np.transpose(qvec2rotmat(camera.wxyz))
-                T = np.array(camera.position)
-                resolution = ui_resolution.value if prev_pos[id].all == T.all else 450
-                W = resolution
-                H = int(resolution/camera.aspect)
+                q = camera.wxyz
+                R = np.transpose(qvec2rotmat(np.array([q[0], q[2], q[1], q[3]])))
+                T = np.array([-camera.position[1], -camera.position[0], -camera.position[2]])
+                W = ui_resolution.value
+                H = int(W/camera.aspect)
                 focal_x = W/2/np.tan(camera.fov/2)
                 focal_y = H/2/np.tan(camera.fov/2)
                 # view = views[0]
@@ -128,10 +130,6 @@ def main(dataset, opt, pipe, checkpoint) -> None:
 
                 image_nd = image.detach().cpu().numpy().astype(np.float32)
                 image_nd = np.transpose(image_nd, (2, 1, 0))
-
-                # ----------------------------------
-                # image_nd = TF.to_pil_image(image)  # Convert tensor to PIL Image
-                # image_nd = np.array(image_nd)
                 client.set_background_image(image_nd, format="jpeg")
 
                 prev_pos[id] = T
