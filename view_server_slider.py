@@ -17,6 +17,7 @@ from scene.cameras import Camera
 import numpy as np
 from scene import GaussianModel, Scene
 import torch
+from utils.sh_utils import eval_sh
 from gaussian_renderer import render
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
@@ -61,9 +62,6 @@ def main(pipe, opt, ply_path) -> None:
     orig_gaus.training_setup(opt)
     orig_gaus.viser_load_ply(ply_path)
 
-    # xmean = torch.mean(orig_gaus._xyz[:,0]).cpu()
-    # ymean = torch.mean(orig_gaus._xyz[:,1]).cpu()
-    # zmean = torch.mean(orig_gaus._xyz[:,2]).cpu()
     xmin, xmax = torch.min(orig_gaus._xyz[:,0]).cpu(), torch.max(orig_gaus._xyz[:,0]).cpu()
     ymin, ymax = torch.min(orig_gaus._xyz[:,1]).cpu(), torch.max(orig_gaus._xyz[:,1]).cpu()
     zmin, zmax = torch.min(orig_gaus._xyz[:,2]).cpu(), torch.max(orig_gaus._xyz[:,2]).cpu()
@@ -115,6 +113,32 @@ def main(pipe, opt, ply_path) -> None:
         initial_value=920,
 
     )
+
+    rgb_checkbox_disable = server.add_gui_checkbox(
+        "RGB Picker",
+        initial_value=False,
+    )
+    r_multi_slider = server.add_gui_multi_slider(
+            "R Selection",
+            min=0,
+            max=3.5,
+            step=0.05,
+            initial_value=(0, 3.5),
+    )
+    g_multi_slider = server.add_gui_multi_slider(
+            "G Selection",
+            min=0,
+            max=3.5,
+            step=0.05,
+            initial_value=(0, 3.5),
+    )
+    b_multi_slider = server.add_gui_multi_slider(
+            "B Selection",
+            min=0,
+            max=3.5,
+            step=0.05,
+            initial_value=(0, 3.5),
+    )
     # print(orig_gaus._xyz.shape)
     # print(orig_gaus._features_rest.shape)
     # print(orig_gaus._features_rest.shape)
@@ -124,11 +148,17 @@ def main(pipe, opt, ply_path) -> None:
 
     bg_color = [0, 0, 0]
     bg = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+    max_sh_degree = 3
+    active_sh_degree = 0
     prev_pos = {}
     
     with torch.no_grad():
         while True:
             for client in server.get_clients().values():
+                r_multi_slider.disabled = rgb_checkbox_disable.value
+                g_multi_slider.disabled = rgb_checkbox_disable.value
+                b_multi_slider.disabled = rgb_checkbox_disable.value
+
                 camera = client.camera
                 id = client.client_id
 
@@ -164,7 +194,29 @@ def main(pipe, opt, ply_path) -> None:
                 y_cond = (yslide_min >= new_gaus._xyz[:, 1]) | (new_gaus._xyz[:, 1] >= y_slide_max)
                 z_cond = (zslide_min >= new_gaus._xyz[:, 2]) | (new_gaus._xyz[:, 2] >= z_slide_max)
 
-                mask = torch.where( (x_cond|y_cond|z_cond), True, False)
+                # Precompute colors from SHs in Python
+                if rgb_checkbox_disable.value == False:
+                    cam_pos = torch.tensor(camera.position).reshape(1,-1).to("cuda")
+                    dc_rest = torch.cat((new_gaus._features_dc, new_gaus._features_rest), dim=1)
+                    shs_view = dc_rest.transpose(1, 2).view(-1, 3, (max_sh_degree+1)**2)
+                    dir_pp = (new_gaus._xyz - cam_pos.repeat(dc_rest.shape[0], 1))
+                    dir_pp_normalized = dir_pp/dir_pp.norm(dim=1, keepdim=True)
+                    sh2rgb = eval_sh(active_sh_degree, shs_view, dir_pp_normalized)
+                    colors_precomp = torch.clamp_min(sh2rgb + 0.5, 0.0)
+
+                    r_min, r_max = r_multi_slider.value
+                    g_min, g_max = g_multi_slider.value
+                    b_min, b_max = b_multi_slider.value
+
+                    r_cond = (r_min >= colors_precomp[:, 0]) | (colors_precomp[:, 0] >= r_max)
+                    g_cond = (g_min >= colors_precomp[:, 1]) | (colors_precomp[:, 1] >= g_max)
+                    b_cond = (b_min >= colors_precomp[:, 2]) | (colors_precomp[:, 2] >= b_max)
+
+                    mask = torch.where( (x_cond|y_cond|z_cond|r_cond|g_cond|b_cond), True, False)
+
+                else: 
+                    mask = torch.where( (x_cond|y_cond|z_cond), True, False)
+
                 new_gaus.viser_prune_points(mask) # input = mask to be removed
 
                 image = render(view, new_gaus, pipe, bg)["render"]
