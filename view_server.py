@@ -107,7 +107,7 @@ def main(dataset, opt, pipe, checkpoint) -> None:
                 
                 q = camera.wxyz
                 R = np.transpose(qvec2rotmat(np.array([q[0], q[2], q[1], q[3]])))
-                T = np.array([-camera.position[1], -camera.position[0], -camera.position[2]])
+                T = np.array([camera.position[1], -camera.position[0], -camera.position[2]])
                 W = ui_resolution.value
                 H = int(W/camera.aspect)
                 focal_x = W/2/np.tan(camera.fov/2)
@@ -126,7 +126,7 @@ def main(dataset, opt, pipe, checkpoint) -> None:
                 )
                 image = render(view, gaussians, pipe, bg)["render"]
 
-                # image = torch.flip(image, dims=[2])
+                image = torch.flip(image, dims=[2])
 
                 image_nd = image.detach().cpu().numpy().astype(np.float32)
                 image_nd = np.transpose(image_nd, (2, 1, 0))
