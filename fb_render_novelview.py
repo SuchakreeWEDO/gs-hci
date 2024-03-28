@@ -1,14 +1,3 @@
-#
-# Copyright (C) 2023, Inria
-# GRAPHDECO research group, https://team.inria.fr/graphdeco
-# All rights reserved.
-#
-# This software is free for non-commercial, research and evaluation use 
-# under the terms of the LICENSE.md file.
-#
-# For inquiries contact  george.drettakis@inria.fr
-#
-
 import torch
 from scene import Scene
 import os
@@ -82,6 +71,7 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
             projection_matrix = getProjectionMatrix(znear=znear, zfar=zfar, fovX=FoVx, fovY=FoVy).transpose(0,1).cuda()
             full_proj_transform = (world_view_transform.unsqueeze(0).bmm(projection_matrix.unsqueeze(0))).squeeze(0)
             camera_center = world_view_transform.inverse()[3, :3]
+            print(camera_center)
 
             this_view = (FoVx, FoVy, image_height, image_width, world_view_transform, full_proj_transform, camera_center)
 
@@ -108,8 +98,5 @@ if __name__ == "__main__":
     parser.add_argument("--quiet", action="store_true")
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)
-
-    # Initialize system state (RNG)
-    safe_state(args.quiet)
 
     render_sets(model.extract(args), args.iteration, pipeline.extract(args))
