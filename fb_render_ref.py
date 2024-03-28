@@ -61,3 +61,5 @@ if __name__ == "__main__":
     print("Rendering " + args.model_path)
 
     render_sets(model.extract(args), args.iteration, pipeline.extract(args))
+
+# python fb_render_novelview.py -m D:\3d-reconstruction\datasets\scale_figure
