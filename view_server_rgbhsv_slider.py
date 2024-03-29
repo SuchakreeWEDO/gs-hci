@@ -21,6 +21,8 @@ from utils.sh_utils import eval_sh
 from gaussian_renderer import render
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
+from scipy.interpolate import interp1d
+import matplotlib
 
 def qvec2rotmat(qvec):
     return np.array(
@@ -115,29 +117,55 @@ def main(pipe, opt, ply_path) -> None:
     )
 
     rgb_checkbox_disable = server.add_gui_checkbox(
-        "RGB Picker",
+        "Disable RGB Picker",
         initial_value=False,
     )
     r_multi_slider = server.add_gui_multi_slider(
             "R Selection",
             min=0,
-            max=3.5,
+            max=1,
             step=0.05,
-            initial_value=(0, 3.5),
+            initial_value=(0, 1),
     )
     g_multi_slider = server.add_gui_multi_slider(
             "G Selection",
             min=0,
-            max=3.5,
+            max=1,
             step=0.05,
-            initial_value=(0, 3.5),
+            initial_value=(0, 1),
     )
     b_multi_slider = server.add_gui_multi_slider(
             "B Selection",
             min=0,
-            max=3.5,
+            max=1,
             step=0.05,
-            initial_value=(0, 3.5),
+            initial_value=(0, 1),
+    )
+
+    hsv_checkbox_disable = server.add_gui_checkbox(
+        "Disable HSV Picker",
+        initial_value=False,
+    )
+    h_multi_slider = server.add_gui_multi_slider(
+            "H Selection",
+            min=0,
+            max=1,
+            step=0.05,
+            initial_value=(0, 1),
+    )
+    s_multi_slider = server.add_gui_multi_slider(
+            "S Selection",
+            min=0,
+            max=1,
+            step=0.05,
+            initial_value=(0, 1),
+    )
+    v_multi_slider = server.add_gui_multi_slider(
+            "V Selection",
+            min=0,
+            max=1,
+            step=0.05,
+            initial_value=(0, 1),
     )
     # print(orig_gaus._xyz.shape)
     # print(orig_gaus._features_rest.shape)
@@ -152,12 +180,16 @@ def main(pipe, opt, ply_path) -> None:
     active_sh_degree = 0
     prev_pos = {}
     
+
     with torch.no_grad():
         while True:
             for client in server.get_clients().values():
                 r_multi_slider.disabled = rgb_checkbox_disable.value
                 g_multi_slider.disabled = rgb_checkbox_disable.value
                 b_multi_slider.disabled = rgb_checkbox_disable.value
+                h_multi_slider.disabled = hsv_checkbox_disable.value
+                s_multi_slider.disabled = hsv_checkbox_disable.value
+                v_multi_slider.disabled = hsv_checkbox_disable.value
 
                 camera = client.camera
                 id = client.client_id
@@ -195,7 +227,7 @@ def main(pipe, opt, ply_path) -> None:
                 z_cond = (zslide_min >= new_gaus._xyz[:, 2]) | (new_gaus._xyz[:, 2] >= z_slide_max)
 
                 # Precompute colors from SHs in Python
-                if rgb_checkbox_disable.value == False:
+                if (hsv_checkbox_disable.value == False) or (rgb_checkbox_disable.value == False):
                     cam_pos = torch.tensor(camera.position).reshape(1,-1).to("cuda")
                     dc_rest = torch.cat((new_gaus._features_dc, new_gaus._features_rest), dim=1)
                     shs_view = dc_rest.transpose(1, 2).view(-1, 3, (max_sh_degree+1)**2)
@@ -204,17 +236,46 @@ def main(pipe, opt, ply_path) -> None:
                     sh2rgb = eval_sh(active_sh_degree, shs_view, dir_pp_normalized)
                     colors_precomp = torch.clamp_min(sh2rgb + 0.5, 0.0)
 
-                    r_min, r_max = r_multi_slider.value
-                    g_min, g_max = g_multi_slider.value
-                    b_min, b_max = b_multi_slider.value
+                    colors_precomp = torch.clamp(colors_precomp, min=0, max=1)   
+                    rgb_precomp = colors_precomp.clone().cpu()      
 
-                    r_cond = (r_min >= colors_precomp[:, 0]) | (colors_precomp[:, 0] >= r_max)
-                    g_cond = (g_min >= colors_precomp[:, 1]) | (colors_precomp[:, 1] >= g_max)
-                    b_cond = (b_min >= colors_precomp[:, 2]) | (colors_precomp[:, 2] >= b_max)
+                    if (hsv_checkbox_disable.value == False):
+                        color_hsv = matplotlib.colors.rgb_to_hsv(rgb_precomp)
+                        color_hsv = torch.tensor(color_hsv).cuda()
 
-                    mask = torch.where( (x_cond|y_cond|z_cond|r_cond|g_cond|b_cond), True, False)
+                        h_min, h_max = h_multi_slider.value
+                        s_min, s_max = s_multi_slider.value
+                        v_min, v_max = v_multi_slider.value
+                        h_cond = (h_min >= color_hsv[:, 0]) | (color_hsv[:, 0] >= h_max)
+                        s_cond = (s_min >= color_hsv[:, 1]) | (color_hsv[:, 1] >= s_max)
+                        v_cond = (v_min >= color_hsv[:, 2]) | (color_hsv[:, 2] >= v_max)
+
+                    if (rgb_checkbox_disable.value == False):
+                        color_255 = torch.tensor(rgb_precomp).cuda()
+                        
+                        r_min, r_max = r_multi_slider.value
+                        g_min, g_max = g_multi_slider.value
+                        b_min, b_max = b_multi_slider.value
+                        r_cond = (r_min >= color_255[:, 0]) | (color_255[:, 0] >= r_max)
+                        g_cond = (g_min >= color_255[:, 1]) | (color_255[:, 1] >= g_max)
+                        b_cond = (b_min >= color_255[:, 2]) | (color_255[:, 2] >= b_max)
+
+
+                    if (hsv_checkbox_disable.value == False) and (rgb_checkbox_disable.value == False):
+                        print("RGB on, HSV on")
+                        mask = torch.where( (x_cond|y_cond|z_cond|r_cond|g_cond|b_cond|h_cond|s_cond|v_cond), True, False)
+
+                    elif (hsv_checkbox_disable.value == True) and (rgb_checkbox_disable.value == False):
+                        print("RGB on, HSV off")
+                        mask = torch.where( (x_cond|y_cond|z_cond|r_cond|g_cond|b_cond), True, False)
+
+                    elif (hsv_checkbox_disable.value == False) and (rgb_checkbox_disable.value == True):
+                        print("RGB off, HSV on")
+                        mask = torch.where( (x_cond|y_cond|z_cond|h_cond|s_cond|v_cond), True, False)
+                    else: pass
 
                 else: 
+                    print("RGB off, HSV off")
                     mask = torch.where( (x_cond|y_cond|z_cond), True, False)
 
                 new_gaus.viser_prune_points(mask) # input = mask to be removed
