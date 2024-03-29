@@ -38,6 +38,8 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
         print("R = ", first_view.R)
         print("T = ", first_view.T)
         print("camera_center = ", first_view.camera_center)
+        print("active_sh_degree = ", gaussians.active_sh_degree)
+        print("max_sh_degree = ", gaussians.max_sh_degree)
         FoVx = first_view.FoVx
         FoVy = first_view.FoVy
         # image_height = first_view.image_height
@@ -62,4 +64,4 @@ if __name__ == "__main__":
 
     render_sets(model.extract(args), args.iteration, pipeline.extract(args))
 
-# python fb_render_novelview.py -m D:\3d-reconstruction\datasets\scale_figure
+# python fb_render_ref.py -m D:\3d-reconstruction\datasets\scale_figure

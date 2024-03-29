@@ -177,7 +177,7 @@ def main(pipe, opt, ply_path) -> None:
     bg_color = [0, 0, 0]
     bg = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
     max_sh_degree = 3
-    active_sh_degree = 0
+    active_sh_degree = 3
     prev_pos = {}
     
 
@@ -228,13 +228,26 @@ def main(pipe, opt, ply_path) -> None:
 
                 # Precompute colors from SHs in Python
                 if (hsv_checkbox_disable.value == False) or (rgb_checkbox_disable.value == False):
+                    # camera position
                     cam_pos = torch.tensor(camera.position).reshape(1,-1).to("cuda")
+
+                    # concat color features 
                     dc_rest = torch.cat((new_gaus._features_dc, new_gaus._features_rest), dim=1)
+                    # print("dc_rest.shape", dc_rest.shape) [1580788, 16, 3]
+
                     shs_view = dc_rest.transpose(1, 2).view(-1, 3, (max_sh_degree+1)**2)
+                    # print("shs_view.shape", shs_view.shape) [1580788, 3, 16]
+
                     dir_pp = (new_gaus._xyz - cam_pos.repeat(dc_rest.shape[0], 1))
                     dir_pp_normalized = dir_pp/dir_pp.norm(dim=1, keepdim=True)
+                    # print("dir_pp_normalized.shape", dir_pp_normalized.shape) [1580788, 3]
+
                     sh2rgb = eval_sh(active_sh_degree, shs_view, dir_pp_normalized)
                     colors_precomp = torch.clamp_min(sh2rgb + 0.5, 0.0)
+
+                    # print(torch.min(colors_precomp[:,0]), torch.max(colors_precomp[:,0]))
+                    # print(torch.min(colors_precomp[:,1]), torch.max(colors_precomp[:,1]))
+                    # print(torch.min(colors_precomp[:,2]), torch.max(colors_precomp[:,2]))
 
                     colors_precomp = torch.clamp(colors_precomp, min=0, max=1)   
                     rgb_precomp = colors_precomp.clone().cpu()      
@@ -252,7 +265,7 @@ def main(pipe, opt, ply_path) -> None:
 
                     if (rgb_checkbox_disable.value == False):
                         color_255 = torch.tensor(rgb_precomp).cuda()
-                        
+
                         r_min, r_max = r_multi_slider.value
                         g_min, g_max = g_multi_slider.value
                         b_min, b_max = b_multi_slider.value
@@ -262,20 +275,20 @@ def main(pipe, opt, ply_path) -> None:
 
 
                     if (hsv_checkbox_disable.value == False) and (rgb_checkbox_disable.value == False):
-                        print("RGB on, HSV on")
+                        # print("RGB on, HSV on")
                         mask = torch.where( (x_cond|y_cond|z_cond|r_cond|g_cond|b_cond|h_cond|s_cond|v_cond), True, False)
 
                     elif (hsv_checkbox_disable.value == True) and (rgb_checkbox_disable.value == False):
-                        print("RGB on, HSV off")
+                        # print("RGB on, HSV off")
                         mask = torch.where( (x_cond|y_cond|z_cond|r_cond|g_cond|b_cond), True, False)
 
                     elif (hsv_checkbox_disable.value == False) and (rgb_checkbox_disable.value == True):
-                        print("RGB off, HSV on")
+                        # print("RGB off, HSV on")
                         mask = torch.where( (x_cond|y_cond|z_cond|h_cond|s_cond|v_cond), True, False)
                     else: pass
 
                 else: 
-                    print("RGB off, HSV off")
+                    # print("RGB off, HSV off")
                     mask = torch.where( (x_cond|y_cond|z_cond), True, False)
 
                 new_gaus.viser_prune_points(mask) # input = mask to be removed
