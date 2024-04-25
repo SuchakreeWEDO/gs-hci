@@ -304,7 +304,7 @@ def main(pipe, opt, ply_path) -> None:
                 def _(event: viser.GuiEvent) -> None:
                     client = event.client
                     assert client is not None
-                    new_gaus.save_ply(f"./saved_point_cloud_{time.time()}.ply")
+                    new_gaus.save_ply(f"./viser_output/saved_point_cloud.ply")
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Training script parameters")
