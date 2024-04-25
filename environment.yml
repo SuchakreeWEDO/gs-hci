@@ -1,4 +1,4 @@
-name: gaussian_splatting
+name: gs-no-depth
 channels:
   - pytorch
   - conda-forge
@@ -17,4 +17,3 @@ dependencies:
   - pip:
     - submodules/diff-gaussian-rasterization
     - submodules/simple-knn
-    - submodules/diff-gaussian-rasterization-depth

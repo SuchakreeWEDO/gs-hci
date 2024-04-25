@@ -56,7 +56,7 @@ class ModelParams(ParamGroup):
         self.eval = False
         self.model_name = ""
         self.method = "gs"
-        self.depth_upto = 30_000
+        # self.depth_upto = 30_000
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):

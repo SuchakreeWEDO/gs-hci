@@ -1,6 +1,3 @@
-[submodule "submodules/diff-gaussian-rasterization-depth"]
-	path = submodules/diff-gaussian-rasterization-depth
-	url = https://github.com/leo-frank/diff-gaussian-rasterization-depth.git
 [submodule "submodules/simple-knn"]
 	path = submodules/simple-knn
 	url = https://gitlab.inria.fr/bkerbl/simple-knn.git
@@ -10,9 +7,3 @@
 [submodule "SIBR_viewers"]
 	path = SIBR_viewers
 	url = https://gitlab.inria.fr/sibr/sibr_core.git
-[submodule "Depth-Anything"]
-	path = Depth-Anything
-	url = https://github.com/LiheYoung/Depth-Anything
-[submodule "submodules/diff-gaussian-rasterization-depth-acc-main"]
-	path = submodules/diff-gaussian-rasterization-depth-acc-main
-	url = https://github.com/robot0321/diff-gaussian-rasterization-depth-acc.git

@@ -1,17 +1,15 @@
-cd %dataset%\gaussian_splatting\%target%
-mkdir input
-ffmpeg -i video.mp4 -qscale:v 1 -qmin 1 -vf fps=1 input/%03d.jpg
+SET dataset=D:\3d-reconstruction\datasets\android-img-fixisoae
+SET workspace=D:\3d-reconstruction\gs-hci
 
-cd %workspace%\gaussian-splatting
-python convert.py -s %dataset%\gaussian_splatting\%target%
+@REM cd %dataset%
+@REM mkdir input
+@REM ffmpeg -i video.mp4 -qscale:v 1 -qmin 1 -vf fps=0.5 input/%%03d.jpg
 
-cd %workspace%/gaussian-splatting/Depth-Anything
-python run.py --encoder vitl --img-path %dataset%/gaussian_splatting/%target%/images --outdir %dataset%/gaussian_splatting/%target%/depth --pred-only --grayscale
+@REM cd %workspace%
+@REM python convert.py -s %dataset%
 
-cd %workspace%/gaussian-splatting/
-python train.py -s ../datasets/media_sony_fixediso --method gs-depth --eval --auto_checkpoint
-python train.py -s ../datasets/media_sony_fixediso --method gs --eval --auto_checkpoint
-tensorboard --logdir ./output
+cd %workspace%
+python train.py -s %dataset% --method gs --eval --auto_checkpoint
 
-python render.py -m <path to trained model> # Generate renderings
-python metrics.py -m <path to trained model> # Compute error metrics on renderings
+@REM python render.py -m <path to trained model> # Generate renderings
+@REM python metrics.py -m <path to trained model> # Compute error metrics on renderings
