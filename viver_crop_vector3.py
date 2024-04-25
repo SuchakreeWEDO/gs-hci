@@ -168,4 +168,4 @@ if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
     main( pp.extract(args),  op.extract(args), args.ply)
 
-# python view_server_crop.py --ply point_cloud.ply
+# python viver_crop_vector3.py --ply point_cloud.ply

@@ -38,7 +38,10 @@ if not args.skip_matching:
         --ImageReader.single_camera 1 \
         --ImageReader.camera_model " + args.camera + " \
         --SiftExtraction.use_gpu " + str(use_gpu)
+    # " \
+        # --ImageReader.mask_path " + args.source_path + "/mask"
     exit_code = os.system(feat_extracton_cmd)
+    print(feat_extracton_cmd)
     if exit_code != 0:
         logging.error(f"Feature extraction failed with code {exit_code}. Exiting.")
         exit(exit_code)
@@ -48,6 +51,7 @@ if not args.skip_matching:
         --database_path " + args.source_path + "/distorted/database.db \
         --SiftMatching.use_gpu " + str(use_gpu)
     exit_code = os.system(feat_matching_cmd)
+    print(feat_matching_cmd)
     if exit_code != 0:
         logging.error(f"Feature matching failed with code {exit_code}. Exiting.")
         exit(exit_code)
@@ -61,6 +65,7 @@ if not args.skip_matching:
         --output_path "  + args.source_path + "/distorted/sparse \
         --Mapper.ba_global_function_tolerance=0.000001")
     exit_code = os.system(mapper_cmd)
+    print(mapper_cmd)
     if exit_code != 0:
         logging.error(f"Mapper failed with code {exit_code}. Exiting.")
         exit(exit_code)
@@ -73,6 +78,7 @@ img_undist_cmd = (colmap_command + " image_undistorter \
     --output_path " + args.source_path + "\
     --output_type COLMAP")
 exit_code = os.system(img_undist_cmd)
+print(img_undist_cmd)
 if exit_code != 0:
     logging.error(f"Mapper failed with code {exit_code}. Exiting.")
     exit(exit_code)
