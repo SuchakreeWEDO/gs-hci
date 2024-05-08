@@ -1,4 +1,4 @@
-SET dataset=D:\3d-reconstruction\datasets\android-img-fixisoae
+SET dataset=D:\3d-reconstruction\datasets\redroom-colmap2nerf2gs
 SET workspace=D:\3d-reconstruction\gs-hci
 
 @REM cd %dataset%
@@ -9,7 +9,7 @@ SET workspace=D:\3d-reconstruction\gs-hci
 @REM python convert.py -s %dataset%
 
 cd %workspace%
-python train.py -s %dataset% --method gs --eval --auto_checkpoint
+python train.py -s %dataset% --method gs --auto_checkpoint
 
 @REM python render.py -m <path to trained model> # Generate renderings
 @REM python metrics.py -m <path to trained model> # Compute error metrics on renderings
