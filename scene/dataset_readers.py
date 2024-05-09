@@ -290,68 +290,69 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
 
+    bin_path = os.path.join(path, "points3d.bin")
     ply_path = os.path.join(path, "points3d.ply")
 
-    if not os.path.exists(ply_path):
 
-        # params = np.load(r"E:\3d-recon\splatam\experiments\iPhone_Captures\splatam-03052024\SplaTAM_iPhone\params.npz")
-        # xyz     = params['means3D'] # (1180279, 3)
-
-        # tm = np.array([[1,0,0],
-        #                 [0,0,-1],
-        #                 [0,1,0]])
-        
-        # tm2 = np.array([[-1,0,0],
-        #                 [0,1,0],
-        #                 [0,0,1]])
-        
-        # pgl = []
-        # for i in xyz:
-        #     pgl_i = np.dot(tm2, np.dot(tm, i))
-        #     pgl.append(pgl_i)
-        # xyz = np.array(pgl)
-
-
-        # xyz = np.load(r"E:\3d-recon\datasets\splatam-nerf-03052024\points_world.npy")
-
-        # x = xyz[:, 0].reshape(-1,1)
-        # y = xyz[:, 1].reshape(-1,1)
-        # z = xyz[:, 2].reshape(-1,1)
-
-        # del xyz
-        # xyz = np.concatenate([x, y, -z], axis = 1)
-
-        # colors  = params['rgb_colors']
-        # num_pts = xyz.shape[0]
-
-        # print(f" -------- Get initial point cloud ({num_pts})...")
-
-        # pcd = BasicPointCloud(points=xyz, colors=colors, normals=np.zeros((num_pts, 3)))
-        # storePly(ply_path, xyz, colors * 255)
-
-
+    if not os.path.exists(bin_path):
 
         #########################################################################
         # Since this data set has no colmap data, we start with random points
-        num_pts = 100000
-        print(f"Generating random point cloud ({num_pts})...")
+        num_pts = 100_000
+        print(f"Generating random point cloud ({num_pts})... wiht original code")
         
         # We create random points inside the bounds of the synthetic Blender scenes
+
         xyz = np.random.random((num_pts, 3)) * 2.6 - 1.3
         shs = np.random.random((num_pts, 3)) / 255.0
-
         pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
+
         storePly(ply_path, xyz, SH2RGB(shs) * 255)
+
+        ########################################################################
+
+        # https://github.com/Istlemin/depth-supervised-gaussian-splatting/blob/7b88f06f63f2bd274ee0e08e33b1ebd11b1d0481/scene/__init__.py
+        # print("another random method")
+        # positions = np.random.uniform(-1, 1, (10000,3)) * 5
+        # colors    = np.random.uniform(0,  1, (10000,3))
+        # normals   = np.zeros_like(positions)
+        # pcd = BasicPointCloud(points=positions, colors=colors, normals=normals)
+        # storePly(ply_path, positions, colors)
+        #########################################################################
+
+        # https://github.com/Fictionarry/DNGaussian/blob/69096b6457e0eb82317c9949feccaa25412dc1ed/scene/dataset_readers.py#L323
+        # num_pts = 10_000
+        # print(f"Generating random point cloud ({num_pts})...")
+        
+        # # We create random points inside the bounds of the synthetic Blender scenes
+        # xyz = np.random.random((num_pts, 3)) * 2 - 1
+        # shs = np.random.random((num_pts, 3)) / 255.0
+        # pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
+
+        # storePly(ply_path, xyz, SH2RGB(shs) * 255)
+        #########################################################################
+
+        # https://github.com/turandai/gaussian_surfels/blob/654511a86573f311f4875c070fef8f58791a0548/scene/dataset_readers.py#L293
+        # num_pts = 50_0000
+        # print(f"Generating random point cloud ({num_pts})...")
+        
+        # # We create random points inside the bounds of the synthetic Blender scenes
+        # rand_scale = 2.6
+        # xyz = np.random.random((num_pts, 3)) * rand_scale - rand_scale / 2
+        # shs = np.random.random((num_pts, 3)) / 255.0
+
+        # normal = np.random.random((num_pts, 3)) - 0.5
+        # normal /= np.linalg.norm(normal, 2, 1, True)
+        # pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=normal)
         #########################################################################
         
     else:
-    # try:
-    # print("Fetching ply from ", ply_path)
+        # Fabby : try init points from Colmap points3d => still same error
+        print(f"Read COLMAP {bin_path} and convert to {ply_path}")
+        xyz, rgb, _ = read_points3D_binary(bin_path)
+        storePly(ply_path, xyz, rgb)
         pcd = fetchPly(ply_path)
-    # print(pcd)
-    # print(pcd.points)
-    # except:
-        # pcd = None
+
 
     scene_info = SceneInfo(point_cloud=pcd,
                            train_cameras=train_cam_infos,

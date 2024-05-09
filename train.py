@@ -119,6 +119,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             if iteration % 10 == 0:
                 progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}"})
                 progress_bar.update(10)
+                print("Number of points : ", gaussians._xyz.shape[0])
             if iteration == opt.iterations:
                 progress_bar.close()
 
@@ -135,11 +136,15 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
+                    print("Number of points BEFORE densify_and_prune : ", gaussians._xyz.shape[0])
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
+                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold) # orig
+                    print("Number of points AFTER densify_and_prune : ", gaussians._xyz.shape[0])
                 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
+                    print("Number of points BEFORE opacity reset : ", gaussians._xyz.shape[0])
                     gaussians.reset_opacity()
+                    print("Number of points AFTER opacity reset : ", gaussians._xyz.shape[0])
 
             # Optimizer step
             if iteration < opt.iterations:
